@@ -147,6 +147,33 @@ docker run --rm -p 8080:8080 --env-file .env intersection-audit
 
 ---
 
+## Cloud Run 的快取陷阱
+
+`gcloud run deploy --source .` 預設會拿 `.gitignore` 當作上傳的排除規則。
+而 `backend/.cache/`（43 MB）刻意不進版控，於是**預熱快取不會跟著部署上去** ——
+線上 `cache_entries` 會是 0，每次分析都得等兩分鐘。
+
+根目錄的 `.gcloudignore` 就是為了解決這件事：它一旦存在，gcloud 就不再參考
+`.gitignore`，而該檔案刻意「不」排除 `backend/.cache/`。
+
+部署前務必先確認本機快取是最新的：
+
+```powershell
+cd backend
+python prewarm.py --prune     # 清掉舊指紋的垃圾
+python prewarm.py             # 補齊現行版本
+python prewarm.py --list      # 確認筆數
+cd ..
+gcloud run deploy ...
+```
+
+部署完開 `/api/health` 對照 `cache_entries` 是否與本機一致。
+
+> 若是走 GitHub 觸發 Cloud Build 而非 `--source .`，`.gcloudignore` 沒有作用 ——
+> 那條路必須把 `backend/.cache/` 加入版控才會有快取。
+
+---
+
 ## 附錄：改用 Cloud Run（需要帳單帳戶）
 
 之後拿到帳單帳戶想搬過去的話：

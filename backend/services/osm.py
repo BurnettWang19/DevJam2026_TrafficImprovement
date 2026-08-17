@@ -77,7 +77,11 @@ async def fetch_osm(bbox: tuple[float, float, float, float]) -> dict:
             for url in OVERPASS_ENDPOINTS:
                 try:
                     r = await client.post(url, data={"data": query})
-                    r.raise_for_status()
+                    if r.status_code != 200:
+                        # Overpass 會把真正的原因寫在 body 裡（語法錯誤、IP 被擋、
+                        # 負載過高…），只記狀態碼等於什麼都沒記到
+                        body = " ".join(r.text.split())[:180]
+                        raise RuntimeError(f"HTTP {r.status_code} — {body}")
                     payload = r.json()
                     if "elements" not in payload:
                         raise ValueError("回應中沒有 elements 欄位")
@@ -90,8 +94,9 @@ async def fetch_osm(bbox: tuple[float, float, float, float]) -> dict:
                     data = payload
                     break
                 except Exception as exc:
-                    errors.append(f"[第{attempt + 1}輪] {url}: "
-                                  f"{type(exc).__name__} {exc}"[:180])
+                    host = url.split("/")[2]
+                    errors.append(f"[第{attempt + 1}輪] {host}: "
+                                  f"{type(exc).__name__} {exc}"[:220])
             if data is not None:
                 break
             await asyncio.sleep(1.5 * (attempt + 1))

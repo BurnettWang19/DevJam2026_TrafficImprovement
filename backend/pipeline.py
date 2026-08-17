@@ -177,7 +177,22 @@ async def _analyze(lat: float, lng: float, size_m: float) -> dict:
     trace.add("擷取資料", "running", "同時向 OpenStreetMap 與衛星影像來源取資料")
     osm_task = asyncio.create_task(osm.fetch_osm(bbox))
     img_task = asyncio.create_task(fetch_satellite(lat, lng, size_m))
-    osm_fc, (base_png, frame, provider) = await asyncio.gather(osm_task, img_task)
+    osm_res, img_res = await asyncio.gather(osm_task, img_task, return_exceptions=True)
+
+    # 衛星影像是必要的 —— 沒有底圖後面每一步都做不了
+    if isinstance(img_res, BaseException):
+        raise img_res
+    base_png, frame, provider = img_res
+
+    # OSM 掛掉則降級繼續：公共 Overpass 節點對資料中心 IP 限流很兇，
+    # 少了它精度會下降，但影像辨識仍能撐起整條流程。
+    if isinstance(osm_res, BaseException):
+        osm_fc = {"type": "FeatureCollection", "features": []}
+        trace.add("擷取資料", "warning",
+                  f"OpenStreetMap 取用失敗，改以純影像辨識進行（精度會下降）："
+                  f"{str(osm_res)[:300]}")
+    else:
+        osm_fc = osm_res
 
     osm_summary = osm.summarize(osm_fc)
     trace.add("擷取資料", "done",

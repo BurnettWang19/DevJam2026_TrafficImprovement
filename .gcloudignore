@@ -1,0 +1,29 @@
+# gcloud run deploy --source . 上傳時要排除的東西。
+#
+# 這個檔案存在時，gcloud 就「不會」拿 .gitignore 來當預設規則 ——
+# 這正是我們要的：backend/.cache/ 不進版控（43 MB），
+# 但一定要跟著部署上去，否則雲端沒有預熱快取，
+# demo 每次點都要等兩分鐘。
+
+.git/
+.gitignore
+.gitattributes
+.claude/
+
+# 本機環境
+backend/.venv/
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+**/__pycache__/
+*.pyc
+
+# 機密：金鑰用 --set-secrets / --set-env-vars 注入，不要進映像
+.env
+.env.*
+
+# 文件
+*.md
+!example/README.md
+
+# 注意：這裡「刻意不排除」backend/.cache/
