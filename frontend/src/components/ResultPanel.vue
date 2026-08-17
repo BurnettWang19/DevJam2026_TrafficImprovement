@@ -56,7 +56,7 @@ const cases = computed(() => r.value.classic_cases
 const annotations = computed(() => r.value.design?.annotations || [])
 const view = ref('2d')        // 改善後設計：2D 互動 / 3D 檢視
 const can3d = computed(() =>
-  !!(r.value.design?.geojson?.features?.length && r.value.satellite_image && r.value.bbox))
+  !!(r.value.design?.geojson?.features?.length && r.value.bbox))
 
 /* 報告改成條列。舊格式（長段落）仍相容，切成句子當作條列。 */
 const toPoints = (list, fallback) => {
@@ -163,7 +163,6 @@ const coords = computed(() => {
           </div>
         </div>
         <Design3D v-if="view === '3d' && can3d"
-                  :image="r.satellite_image"
                   :geojson="r.design.geojson"
                   :bbox="r.bbox" />
         <DesignExplorer v-else-if="annotations.length"

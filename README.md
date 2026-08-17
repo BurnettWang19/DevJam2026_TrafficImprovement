@@ -36,6 +36,7 @@
 ```
 GEMINI_API_KEY=...          ← 必填
 GOOGLE_MAPS_API_KEY=...     ← 選填
+GOOGLE_MAP_TILES_API_KEY=... ← 選填，真實城市 3D 檢視
 ```
 
 **`GEMINI_API_KEY`（必填）** 從 https://aistudio.google.com/apikey 取得。
@@ -45,6 +46,10 @@ GOOGLE_MAPS_API_KEY=...     ← 選填
 整條流程照跑，只是影像解析度略低。詳見下面「衛星影像來源」。
 要用 Google 的話：Google Cloud Console → APIs & Services → Library → 搜尋
 "Maps Static API" → **Enable** → Credentials → Create API key。專案必須綁定帳單帳戶。
+
+**`GOOGLE_MAP_TILES_API_KEY`（選填）** 控制結果頁的「3D 檢視」。需在 Google Cloud
+專案啟用 **Map Tiles API** 並綁定帳單帳戶。這把 Key 應與 Static Maps 分開建立，
+API restrictions 只允許 Map Tiles API，並設定每日 quota 與 Billing Budget。
 
 ### 2. 貼上評分標準
 
@@ -175,7 +180,7 @@ DavJam_Project/
 ├─ example/           經典案例資料夾（`經典案例` / `classic_cases` 這兩個名字也認）
 │  ├─ index.json      案例清單（已放 4 筆範例）
 │  └─ README.md       怎麼新增案例
-└─ frontend/          Vue 3 + Vite + Leaflet
+└─ frontend/          Vue 3 + Vite + Leaflet + CesiumJS
 ```
 
 ---
@@ -226,6 +231,49 @@ Gemini 回傳的正規化座標換回經緯度的精度不受來源影響（實�
 所以你不用手動指定 zoom，程式會自己找到該地點實際可用的最高解析度。
 超過 70% 的圖磚拿不到時會直接報錯，而不是把破圖送給 Gemini 辨識。
 
+---
+
+## 真實城市 3D 檢視
+
+改善結果的「3D 檢視」使用 Google Photorealistic 3D Tiles 作為現況城市脈絡，
+因此建築物、屋頂、地形與道路表面都來自 Google 的實景 mesh，不再由前端自行擠出
+OSM 建築輪廓。CesiumJS 會依鏡頭視角串流需要的細節，初次開啟時建築會逐步變清晰。
+
+設計向量不是浮在空中的發光管線，而是以實際公尺寬度分類投影到 3D Tiles 表面：
+
+| 圖層 | 3D 表達方式 |
+|---|---|
+| 車道中心線 | 約 3.2 m 寬的低彩度道路鋪面 |
+| 車道／槽化標線 | 依路徑長度切成實際虛線段 |
+| 停止線 | 實線停止桿 |
+| 斑馬線 | 沿穿越方向排列的多條白色行穿線 |
+| 人行道／外推段／庇護島 | 帶緣石邊界的低彩度人行空間 |
+
+這些是概念設計覆層，不是測量成果、施工圖或可直接放樣的 CAD 資料。Google Tiles
+只用於瀏覽器視覺化，不會寫入快取、擷取模型，也不會送進 Gemini。介面固定開啟
+`showCreditsOnScreen`，不可遮蔽或移除 Google 與第三方資料標示。
+
+本機執行時把 Key 放在專案根目錄 `.env`：
+
+```dotenv
+GOOGLE_MAP_TILES_API_KEY=your_map_tiles_api_key
+```
+
+前端透過 FastAPI 的 `/api/map-tiles/config` 在執行時取得 Tileset URL；Key 不會寫進
+原始碼或 Vite build，但瀏覽器向 Google 請求圖磚時仍能看見它，因此不能把它視為
+真正的秘密。請務必限制 API、控制 quota，展示結束後輪替 Key。
+
+Cloud Run 使用同一個 runtime 變數 `GOOGLE_MAP_TILES_API_KEY`，不要把 `.env` 複製進
+容器映像。可在 Cloud Run 的 Variables & Secrets 設定頁加入環境變數，或從 Secret
+Manager 掛載成同名環境變數；現有 Dockerfile 不需要 build argument。
+
+官方文件：
+
+- [Photorealistic 3D Tiles](https://developers.google.com/maps/documentation/tile/3d-tiles)
+- [Map Tiles API 政策](https://developers.google.com/maps/documentation/tile/policies)
+- [Map Tiles API 計費](https://developers.google.com/maps/documentation/tile/usage-and-billing)
+- [CesiumJS 搭配 Vite](https://cesium.com/blog/2024/02/13/configuring-vite-or-webpack-for-cesiumjs/)
+
 ### OSM Overpass 的三個實測坑
 
 1. **`overpass-api.de` 會用 406 擋掉沒有 User-Agent 的請求。** 已固定帶 UA。
@@ -243,6 +291,7 @@ Gemini 回傳的正規化座標換回經緯度的精度不受來源影響（實�
 |---|---|---|
 | `POST` | `/api/analyze` | `{lat, lng, size_m}` → 完整分析結果 |
 | `GET` | `/api/health` | 金鑰、prompt、案例數的環境檢查 |
+| `GET` | `/api/map-tiles/config` | 3D Tiles 瀏覽器執行期設定（禁止快取） |
 | `GET` | `/api/cases` | 經典案例清單 |
 | `GET` | `/api/session/{id}` | 讀該次分析暫存在記憶體的內容 |
 | `GET` | `/api/cache` | 目前 prompt／模型指紋下可用的快取 |

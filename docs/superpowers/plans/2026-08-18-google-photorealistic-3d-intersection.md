@@ -327,7 +327,7 @@ On unmount, cancel the orbit animation, remove DOM listeners, destroy the Cesium
 - `Design3D` no longer consumes the satellite image data URL.
 - The 3D view still requires `design.geojson.features` and `bbox`.
 
-- [ ] **Step 1: Update the lazy-view contract**
+- [x] **Step 1: Update the lazy-view contract**
 
 Change `can3d` and the component invocation to:
 
@@ -344,7 +344,7 @@ const can3d = computed(() =>
 
 Keep `defineAsyncComponent` so Cesium remains outside the initial application chunk.
 
-- [ ] **Step 2: Document local and Cloud Run configuration**
+- [x] **Step 2: Document local and Cloud Run configuration**
 
 Add a README section stating:
 
@@ -354,7 +354,7 @@ GOOGLE_MAP_TILES_API_KEY=your_map_tiles_api_key
 
 Document that the key must be restricted to Map Tiles API, that browser requests make it observable even though it is delivered at runtime, and that quotas/budget alerts are required. Document `showCreditsOnScreen`, the visualization-only usage, and the local flow `npm install` then `npm run dev` with FastAPI running on port 8000.
 
-- [ ] **Step 3: Document the visual semantics**
+- [x] **Step 3: Document the visual semantics**
 
 State that Photorealistic 3D Tiles are the existing-city context and the colored classified corridors are concept-design overlays, not survey-grade CAD or construction drawings. Describe solid stop bars, dashed lane markings, zebra crossings, and muted pedestrian-space fills.
 
