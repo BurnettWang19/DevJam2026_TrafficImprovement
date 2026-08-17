@@ -15,7 +15,9 @@ FROM node:22-slim AS frontend
 
 WORKDIR /app/frontend
 COPY frontend/package.json frontend/package-lock.json ./
-RUN npm ci --omit=dev --no-audit --no-fund || npm install --no-audit --no-fund
+# 要裝含 devDependencies 的完整依賴 —— vite 本身就在 devDependencies 裡。
+# 這一層是建置階段，不會進最終映像。
+RUN npm ci --no-audit --no-fund || npm install --no-audit --no-fund
 COPY frontend/ ./
 RUN npm run build
 
