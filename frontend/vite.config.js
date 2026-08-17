@@ -1,8 +1,31 @@
+import { fileURLToPath, URL } from 'node:url'
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
+import { viteStaticCopy } from 'vite-plugin-static-copy'
+
+const cesiumSource = fileURLToPath(
+  new URL('./node_modules/cesium/Build/Cesium', import.meta.url),
+)
+const cesiumBaseUrl = 'cesiumStatic'
+const cesiumDirectories = ['Workers', 'ThirdParty', 'Assets', 'Widgets']
 
 export default defineConfig({
-  plugins: [vue()],
+  define: {
+    CESIUM_BASE_URL: JSON.stringify(`/${cesiumBaseUrl}/`),
+  },
+  plugins: [
+    vue(),
+    viteStaticCopy({
+      // v4 preserves source paths. Strip the common
+      // node_modules/cesium/Build/Cesium/<directory> prefix while retaining
+      // nested files such as Assets/Textures and ThirdParty/Workers.
+      targets: cesiumDirectories.map((directory) => ({
+        src: `${cesiumSource}/${directory}/**/*`,
+        dest: `${cesiumBaseUrl}/${directory}`,
+        rename: { stripBase: 5 },
+      })),
+    }),
+  ],
   server: {
     port: 5173,
     proxy: {

@@ -32,6 +32,10 @@ load_dotenv(ROOT_DIR / ".env")
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "").strip()
+GOOGLE_MAP_TILES_API_KEY = (
+    os.getenv("GOOGLE_MAP_TILES_API_KEY", "").strip()
+    or os.getenv("VITE_GOOGLE_MAP_TILES_API_KEY", "").strip()
+)
 
 # 分析歷史紀錄要存放的 GCS bucket 名稱。留空 = 停用歷史功能。
 # 本機開發需要 ADC 憑證（gcloud auth application-default login），
