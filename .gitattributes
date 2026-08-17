@@ -1,0 +1,9 @@
+# 統一用 LF 存進 repo，避免 Windows/Mac/Linux 之間出現整檔案的假差異
+* text=auto eol=lf
+
+# 二進位檔不要做任何轉換
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.ico binary

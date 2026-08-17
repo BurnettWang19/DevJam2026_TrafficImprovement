@@ -1,0 +1,53 @@
+# ---------------------------------------------------------------------------
+# 每個 Agent 角色對應的 Gemini 模型 ID。
+# 程式不寫死型號，要換模型改這裡就好（不用重啟也會生效，每次呼叫都重讀）。
+#
+# 2026-08 目前可用的常見型號：
+#   gemini-3.7-flash        最新 Flash，多模態 + 推理最強
+#   gemini-3.6-flash        上一代穩定版
+#   gemini-3.5-flash        穩定 legacy Flash（規格書指定的「Gemini 3.5」）
+#   gemini-3.5-flash-lite   便宜、快
+#   gemini-3-pro-image      Nano Banana Pro，影像「生成」
+#   gemini-2.5-flash        更舊的穩定版
+# 注意：gemini-1.5-flash 已停用（規格書原本寫的），這裡用 3.x 取代。
+# ---------------------------------------------------------------------------
+
+roles:
+  # 階段 1：從衛星影像辨識 OSM 沒有的車道線／停止線／槽化線
+  vision_lane_extract: gemini-3.7-flash
+
+  # 階段 2：主評分 Agent（system prompt 由 prompts/00_scorer_system_prompt.md 提供）
+  scorer: gemini-3.7-flash
+
+  # 階段 3：路口類型判斷（規格書指定 Gemini 3.5）
+  intersection_type: gemini-3.5-flash
+
+  # 階段 4：三個平行 Sub Agent
+  sub_crosswalk: gemini-3.5-flash
+  sub_sidewalk: gemini-3.5-flash
+  sub_lane_marking: gemini-3.5-flash
+
+  # 階段 5：重繪道路設計向量圖
+  redesign: gemini-3.7-flash
+
+  # 階段 7：彙整報告（讀記憶體中的問題 + 經典案例 + 改善說明）
+  report: gemini-3.5-flash
+
+  # 階段 6（選用）：把向量圖交給影像生成模型做擬真呈現
+  image_gen: gemini-3-pro-image
+
+options:
+  # 衛星影像來源：
+  #   auto    有 GOOGLE_MAPS_API_KEY 就用 Google，沒有就退到 Esri（建議）
+  #   google  強制 Google Static Maps，需 API key + 已啟用 Maps Static API + 帳單帳戶
+  #   esri    強制 Esri World Imagery，免金鑰免帳單，解析度略低（上限 zoom 19）
+  imagery_provider: auto
+
+  # Pillow 的向量繪圖一定會產生（穩、快、不會翻車）。
+  # true  = 在那之上「額外」呼叫 image_gen 生一張擬真設計圖，前端並排顯示。
+  #         實測 gemini-3-pro-image 效果很好，但會讓總時間從約 90 秒拉到約 115 秒。
+  #         失敗時自動略過，不會中斷流程。demo 現場覺得太久就改回 false。
+  use_gemini_image_gen: true
+
+  # 單次 Gemini 呼叫的重試次數（JSON 解析失敗時）
+  max_retries: 2

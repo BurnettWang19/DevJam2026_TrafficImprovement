@@ -1,0 +1,22 @@
+# === 機密：絕對不要提交 ===
+.env
+.env.*
+!.env.example
+
+# Python
+backend/.venv/
+backend/.cache/
+__pycache__/
+*.pyc
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# 工具
+.claude/settings.local.json
+
+# OS
+Thumbs.db
+desktop.ini
+.DS_Store
