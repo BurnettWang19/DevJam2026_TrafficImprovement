@@ -97,7 +97,7 @@ Confirm that the route is declared before `app.mount("/", ...)`, that the respon
 - Produces: `/cesiumStatic/{Workers,ThirdParty,Assets,Widgets}` in the Vite build.
 - Produces: compile-time `CESIUM_BASE_URL` equal to `/cesiumStatic/`.
 
-- [ ] **Step 1: Replace the obsolete renderer dependency**
+- [x] **Step 1: Replace the obsolete renderer dependency**
 
 From `frontend/`, run:
 
@@ -109,7 +109,7 @@ npm install --save-dev vite-plugin-static-copy
 
 Expected result: `package.json` no longer lists `three`, lists `cesium` under `dependencies`, lists `vite-plugin-static-copy` under `devDependencies`, and npm updates the existing lockfile without discarding unrelated lockfile normalization.
 
-- [ ] **Step 2: Configure Cesium static assets in Vite**
+- [x] **Step 2: Configure Cesium static assets in Vite**
 
 Replace `frontend/vite.config.js` with this structure while retaining the existing dev proxy:
 
