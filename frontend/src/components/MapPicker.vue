@@ -13,6 +13,7 @@ const el = ref(null)
 let map = null
 let marker = null
 let rect = null
+let ro = null
 
 function bounds() {
   const half = props.sizeM / 2
@@ -48,9 +49,16 @@ onMounted(() => {
   }).addTo(map)
 
   map.on('click', (e) => emit('pick', e.latlng.lat, e.latlng.lng))
+
+  // 側欄收合會改變容器寬度，Leaflet 只監聽 window resize，這裡自己補
+  ro = new ResizeObserver(() => map && map.invalidateSize())
+  ro.observe(el.value)
 })
 
-onBeforeUnmount(() => map && map.remove())
+onBeforeUnmount(() => {
+  ro && ro.disconnect()
+  map && map.remove()
+})
 
 watch(() => [props.lat, props.lng, props.sizeM], redraw)
 

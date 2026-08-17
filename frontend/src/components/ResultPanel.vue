@@ -1,5 +1,6 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed } from 'vue'
+import DesignExplorer from './DesignExplorer.vue'
 
 const props = defineProps({ result: { type: Object, required: true } })
 const emit = defineEmits(['back'])
@@ -49,8 +50,6 @@ const cases = computed(() => r.value.classic_cases
   || (r.value.classic_case ? [r.value.classic_case] : []))
 
 const annotations = computed(() => r.value.design?.annotations || [])
-// 預設看乾淨的設計圖；要看說明的人自己切過去
-const showMarks = ref(false)
 
 /* 報告改成條列。舊格式（長段落）仍相容，切成句子當作條列。 */
 const toPoints = (list, fallback) => {
@@ -78,7 +77,7 @@ const coords = computed(() => {
   <div class="review">
     <!-- ── 頁首 ──────────────────────────────────────────── -->
     <header class="head" v-reveal>
-      <button class="back" @click="emit('back')">← 重新選擇路口</button>
+      <div class="headspacer" aria-hidden="true"></div>
 
       <div class="title">
         <p class="eyebrow">Road Design Review</p>
@@ -144,21 +143,23 @@ const coords = computed(() => {
         底圖 {{ r.imagery.attribution }}・zoom {{ r.imagery.zoom }}・{{ r.imagery.meters_per_pixel }} m/px
       </div>
 
-      <!-- ── 設計圖，需要說明的人再切到標示版 ────────── -->
+      <!-- ── 互動式設計圖：點標記放大看改動 ──────────── -->
       <section class="marked" v-if="r.design_image" v-reveal>
         <div class="markedhead">
           <div>
             <p class="eyebrow">Proposed Design</p>
             <h2>改善後的設計</h2>
           </div>
-          <div class="toggle" v-if="r.annotated_image && annotations.length">
-            <button :class="{ on: !showMarks }" @click="showMarks = false">設計圖</button>
-            <button :class="{ on: showMarks }" @click="showMarks = true">標示改動位置</button>
-          </div>
+          <p class="markednote" v-if="annotations.length">
+            互動圖 · 點編號放大檢視
+          </p>
         </div>
-        <img class="markedimg"
-             :src="showMarks ? r.annotated_image : r.design_image"
-             :alt="showMarks ? '改動標示圖' : '設計向量圖'" />
+        <DesignExplorer v-if="annotations.length"
+                        :image="r.design_image"
+                        :annotations="annotations"
+                        :key-changes="r.design?.key_changes || []"
+                        :findings="r.findings || {}" />
+        <img v-else class="markedimg" :src="r.design_image" alt="設計向量圖" />
       </section>
 
       <!-- ── 問題 / 改善（條列） ──────────────────────── -->
@@ -290,6 +291,11 @@ const coords = computed(() => {
         </div>
       </section>
     </template>
+
+    <!-- ── 重選地點 ──────────────────────────────────────── -->
+    <footer class="foot" v-reveal>
+      <button class="backbtn" @click="emit('back')">← 重新選擇路口</button>
+    </footer>
   </div>
 </template>
 
@@ -304,11 +310,12 @@ const coords = computed(() => {
   gap: 20px;
   padding-top: 8px;
 }
-.back {
-  background: none; border: none; padding: 6px 0;
-  color: var(--text-2); font-size: 14px;
+.foot { display: flex; justify-content: center; padding: 10px 0 20px; }
+.backbtn {
+  padding: 13px 40px; border-radius: 999px;
+  font-size: 15px; font-weight: 600; color: var(--green-800);
 }
-.back:hover { background: none; color: var(--green-700); }
+.backbtn:hover { border-color: var(--green-600); color: var(--green-700); }
 .title { text-align: center; }
 .title h1 {
   margin: 0 0 10px;
@@ -376,19 +383,11 @@ const coords = computed(() => {
   gap: 20px; margin-bottom: 20px;
 }
 .markedhead h2 { margin: 0; font-size: 25px; font-weight: 800; color: var(--green-900); }
-.toggle {
-  display: flex; gap: 4px; padding: 4px;
-  background: var(--bg-sunken); border-radius: 999px; flex: none;
+.markednote {
+  margin: 0; flex: none;
+  font-size: 12.5px; color: var(--green-700); font-weight: 600;
+  background: var(--sage); border-radius: 999px; padding: 5px 15px;
 }
-.toggle button {
-  border: none; background: none; border-radius: 999px;
-  padding: 6px 16px; font-size: 13px; color: var(--text-2);
-}
-.toggle button:hover { background: rgba(255, 255, 255, .6); }
-.toggle button.on {
-  background: var(--green-900); color: var(--bg); font-weight: 600;
-}
-.toggle button.on:hover { background: var(--green-800); }
 .markedimg {
   width: 100%; display: block;
   border-radius: 14px; border: 1px solid var(--line-soft);
@@ -524,6 +523,7 @@ const coords = computed(() => {
 }
 @media (max-width: 780px) {
   .head { grid-template-columns: 1fr; }
+  .headspacer { display: none; }
   .title { text-align: left; }
   .title h1 { font-size: 32px; }
   .badge { justify-self: start; }

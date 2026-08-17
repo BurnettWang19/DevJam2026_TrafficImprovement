@@ -5,10 +5,10 @@ import TraceTimeline from './components/TraceTimeline.vue'
 import ResultPanel from './components/ResultPanel.vue'
 import SplashScreen from './components/SplashScreen.vue'
 import RunnerLoader from './components/RunnerLoader.vue'
-import AnalysisProgress from './components/AnalysisProgress.vue'
 import { apiGet, apiPost } from './api'
 
 const booting = ref(true)
+const sidebarOpen = ref(true)
 
 const form = reactive({ lat: 25.0417, lng: 121.549, sizeM: 140 })
 const latText = ref(String(form.lat))
@@ -56,29 +56,50 @@ function usePreset(p) {
   mapRef.value?.flyTo(p.lat, p.lng)
 }
 
+/* 分析完成後不直接切畫面：先讓小遊戲角色衝過終點線（gameDone → @finished）*/
+const gameDone = ref(false)
+let pendingResult = null
+
 async function analyze(force = false) {
   loading.value = true
   forcing.value = force
   error.value = ''
   result.value = null
+  gameDone.value = false
+  pendingResult = null
+  sidebarOpen.value = false        // 分析開始 → 收起左側欄，讓 loading 滿版
   try {
-    result.value = await apiPost('/api/analyze', {
+    pendingResult = await apiPost('/api/analyze', {
       lat: form.lat, lng: form.lng, size_m: form.sizeM, force,
     })
+    gameDone.value = true          // 通知遊戲：放終點線
   } catch (e) {
     error.value = e.message
-  } finally {
     loading.value = false
     forcing.value = false
     refreshHealth()
   }
+}
+
+function onGameFinished() {
+  result.value = pendingResult
+  pendingResult = null
+  loading.value = false
+  forcing.value = false
+  refreshHealth()
+}
+
+function backToMap() {
+  result.value = null
+  error.value = ''
+  sidebarOpen.value = true         // 回到選點畫面時把側欄拉回來
 }
 </script>
 
 <template>
   <SplashScreen v-if="booting" @done="booting = false" />
 
-  <div class="app" v-if="!booting">
+  <div class="app" :class="{ collapsed: !sidebarOpen }" v-if="!booting">
     <aside>
       <header v-reveal>
         <p class="eyebrow">Road Design Review</p>
@@ -109,12 +130,6 @@ async function analyze(force = false) {
         </div>
       </div>
 
-      <div class="card map-card" v-reveal="{ delay: 160 }">
-        <MapPicker ref="mapRef" :lat="form.lat" :lng="form.lng" :size-m="form.sizeM"
-                   @pick="onPick" />
-        <p class="hint">點地圖任一處即可設定中心點</p>
-      </div>
-
       <div class="card" v-if="result?.trace?.length">
         <p class="eyebrow">Pipeline</p>
         <TraceTimeline :trace="result.trace" />
@@ -135,54 +150,117 @@ async function analyze(force = false) {
     </aside>
 
     <main>
-      <div v-if="error" class="card err">分析失敗：{{ error }}</div>
+      <!-- 側欄開合箭頭 -->
+      <button class="edge-toggle" @click="sidebarOpen = !sidebarOpen"
+              :title="sidebarOpen ? '收起側欄' : '展開側欄'"
+              :aria-label="sidebarOpen ? '收起側欄' : '展開側欄'">
+        <span :class="{ flip: !sidebarOpen }">◀</span>
+      </button>
 
-      <div v-else-if="loading" class="card placeholder">
-        <RunnerLoader />
-        <AnalysisProgress :forcing="forcing" />
-        <p v-if="forcing">
-          正在實際重新分析：擷取 OSM 向量與衛星影像 → 影像辨識補上車道標線 →
-          評分 → 路口分類 → 三個代理人平行診斷 → 重繪設計 → 生成圖面 → 彙整說明。
-          約需 2 分鐘。
-        </p>
-        <p v-else>正在分析…</p>
+      <div v-if="error" class="content">
+        <div class="card err">分析失敗：{{ error }}</div>
       </div>
 
-      <ResultPanel v-else-if="result" :result="result" @back="result = null" />
+      <div v-else-if="loading" class="game-stage">
+        <RunnerLoader :forcing="forcing" :done="gameDone" @finished="onGameFinished" />
+      </div>
 
-      <div v-else class="card placeholder intro" v-reveal="{ delay: 120 }">
-        <p class="eyebrow">Getting Started</p>
-        <h2>輸入一組經緯度，開始分析</h2>
-        <ol>
-          <li>自 OpenStreetMap 擷取範圍內的人行道、斑馬線與道路向量</li>
-          <li>由影像辨識補上 OSM 未涵蓋的車道標線、停止線與槽化線</li>
-          <li>依評分標準判斷此路口是否為良好的道路設計</li>
-          <li>有問題則判斷路口型態，非路口即中斷並回報</li>
-          <li>三個代理人分頭診斷斑馬線、人行道與車道標線</li>
-          <li>重繪符合標準的設計、生成圖面，並對照經典案例產出說明</li>
-        </ol>
+      <div v-else-if="result" class="content">
+        <ResultPanel :result="result" @back="backToMap" />
+      </div>
+
+      <!-- 預設畫面：滿版 OSM 選點地圖 -->
+      <div v-else class="map-stage">
+        <MapPicker ref="mapRef" :lat="form.lat" :lng="form.lng" :size-m="form.sizeM"
+                   @pick="onPick" />
+        <div class="map-hint">點地圖任一處設定中心點，再從左側「開始分析」</div>
       </div>
     </main>
   </div>
 </template>
 
 <style scoped>
-.app { display: grid; grid-template-columns: 340px 1fr; height: 100%; }
+.app {
+  display: grid;
+  grid-template-columns: 340px 1fr;
+  height: 100%;
+  transition: grid-template-columns .32s cubic-bezier(.4, 0, .2, 1);
+}
+.app.collapsed { grid-template-columns: 0px 1fr; }
 
 aside {
   border-right: 1px solid var(--line);
   background: var(--bg-sunken);
   padding: 24px 20px;
   overflow-y: auto;
+  overflow-x: hidden;
   display: flex; flex-direction: column; gap: 16px;
+  min-width: 0;
+  transition: padding .32s cubic-bezier(.4, 0, .2, 1), opacity .2s ease;
 }
+.collapsed aside {
+  padding-left: 0; padding-right: 0;
+  border-right: none;
+  opacity: 0;
+}
+aside > * { min-width: 280px; }   /* 收合時內容不跟著壓扁，直接被裁掉 */
+
 aside header h1 {
   margin: 0 0 8px; font-size: 22px; font-weight: 800;
   color: var(--green-900); letter-spacing: -.01em;
 }
 .lede { margin: 0; font-size: 13px; color: var(--text-2); }
 
-main { padding: 32px 36px 64px; overflow-y: auto; }
+main { position: relative; overflow: hidden; min-width: 0; }
+
+/* 一般內容（結果／錯誤）自己捲動 */
+.content { height: 100%; overflow-y: auto; padding: 32px 36px 64px; }
+
+/* ── 側欄開合箭頭 ─────────────────────────────── */
+.edge-toggle {
+  position: absolute;
+  left: 0; top: 50%;
+  transform: translateY(-50%);
+  z-index: 1100;                    /* 蓋過 Leaflet 圖層 */
+  width: 24px; height: 64px;
+  padding: 0;
+  border-radius: 0 12px 12px 0;
+  border: 1px solid var(--line);
+  border-left: none;
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: 11px;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 2px 0 10px rgba(30, 58, 43, .08);
+}
+.edge-toggle:hover { color: var(--green-700); }
+.edge-toggle span { transition: transform .3s ease; display: inline-block; }
+.edge-toggle span.flip { transform: rotate(180deg); }
+
+/* ── 滿版地圖 ────────────────────────────────── */
+.map-stage { position: absolute; inset: 0; }
+.map-stage > :deep(.map) {
+  height: 100%; min-height: 0;
+  border: none; border-radius: 0;
+}
+.map-hint {
+  position: absolute;
+  left: 50%; bottom: 22px;
+  transform: translateX(-50%);
+  z-index: 1000;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 8px 18px;
+  font-size: 13px;
+  color: var(--text-2);
+  box-shadow: 0 4px 18px rgba(30, 58, 43, .12);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* ── Loading：滿版小遊戲 ──────────────────────── */
+.game-stage { position: absolute; inset: 0; }
 
 label { display: block; font-size: 12.5px; color: var(--text-2); margin: 14px 0 7px; }
 label:first-child { margin-top: 0; }
@@ -194,10 +272,6 @@ label:first-child { margin-top: 0; }
 .presets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
 .presets button { font-size: 12px; padding: 5px 11px; border-radius: 999px; }
 
-.map-card { padding: 10px; }
-.map-card > :deep(.map) { height: 250px; }
-.hint { font-size: 12px; margin: 9px 0 2px; text-align: center; color: var(--muted); }
-
 .status ul { list-style: none; padding: 0; margin: 0; font-size: 13px; }
 .status li { color: var(--text-2); }
 .status li::before {
@@ -207,14 +281,14 @@ label:first-child { margin-top: 0; }
 
 .err { border-left: 3px solid #a8412c; color: #8c3826; }
 
-.placeholder { color: var(--text-2); max-width: 720px; }
-.placeholder h2 { color: var(--green-900); font-size: 25px; font-weight: 800; margin: 0 0 14px; }
-.placeholder ol { padding-left: 20px; margin: 0; display: flex; flex-direction: column; gap: 7px; }
-.intro { padding: 34px 38px; }
+.placeholder { color: var(--text-2); }
 
 @media (max-width: 900px) {
-  .app { grid-template-columns: 1fr; height: auto; }
+  .app { grid-template-columns: 1fr; height: auto; display: block; }
   aside { border-right: none; border-bottom: 1px solid var(--line); }
-  main { padding: 24px 18px 48px; }
+  .collapsed aside { display: none; }
+  main { height: 70vh; }
+  .content { padding: 24px 18px 48px; }
+  .edge-toggle { top: 16px; transform: none; }
 }
 </style>
