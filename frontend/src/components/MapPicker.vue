@@ -40,11 +40,11 @@ onMounted(() => {
   }).addTo(map)
 
   marker = L.circleMarker([props.lat, props.lng], {
-    radius: 6, color: '#4ade80', fillColor: '#4ade80', fillOpacity: 1,
+    radius: 6, color: '#1e3a2b', fillColor: '#2f5d45', fillOpacity: 1, weight: 2,
   }).addTo(map)
 
   rect = L.rectangle(bounds(), {
-    color: '#38bdf8', weight: 2, fillOpacity: 0.08, dashArray: '6 4',
+    color: '#2f5d45', weight: 2, fillOpacity: 0.07, dashArray: '6 4',
   }).addTo(map)
 
   map.on('click', (e) => emit('pick', e.latlng.lat, e.latlng.lng))
@@ -69,9 +69,10 @@ defineExpose({
 .map {
   height: 100%;
   min-height: 320px;
-  border-radius: 10px;
+  border-radius: 12px;
   overflow: hidden;
   border: 1px solid var(--line);
 }
-:deep(.leaflet-container) { background: #0f141d; }
+:deep(.leaflet-container) { background: var(--bg-sunken); font: inherit; }
+:deep(.leaflet-control-attribution) { font-size: 10px; }
 </style>

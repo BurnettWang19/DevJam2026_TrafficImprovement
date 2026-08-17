@@ -6,6 +6,7 @@
     python prewarm.py 25.0417 121.549 140
     python prewarm.py --force         # 忽略既有快取，全部重跑
     python prewarm.py --list          # 只列出目前有哪些快取
+    python prewarm.py --prune         # 只刪舊指紋的垃圾，保留現行版本
     python prewarm.py --clear         # 清掉全部快取
 
 上台前跑一次，現場點下去就是 1 秒內出結果。
@@ -74,6 +75,12 @@ if __name__ == "__main__":
     args = [a for a in sys.argv[1:]]
 
     if "--list" in args:
+        show_list()
+        sys.exit(0)
+
+    if "--prune" in args:
+        n, mb = cache.prune()
+        print(f"已清掉 {n} 個舊指紋的快取檔，釋放 {mb} MB\n")
         show_list()
         sys.exit(0)
 

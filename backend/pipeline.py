@@ -29,6 +29,10 @@ from services.gemini import call_image, call_json
 from services.geo import ImageFrame, bbox_from_center
 from services.imagery import attribution, fetch_satellite, to_data_url
 
+# 畫面以易讀為優先：每類問題只留最嚴重的幾個，模型多給也會在這裡被截掉
+MAX_ISSUES_PER_CATEGORY = 2
+_SEVERITY_RANK = {"critical": 0, "high": 1, "medium": 2, "low": 3, "uncertain": 4}
+
 REDESIGN_LAYERS = {
     "roadway", "sidewalk", "crossing", "lane_marking", "stop_line",
     "channelization", "median", "refuge_island", "bulb_out", "corner_radius",
@@ -299,7 +303,8 @@ async def _analyze(lat: float, lng: float, size_m: float) -> dict:
     memory.put(session_id, "findings", findings)   # ← 暫存在記憶體
 
     n_issues = sum(len(s.get("issues", [])) for s in subs)
-    trace.add("Sub Agent 分析", "done", f"共找到 {n_issues} 個問題，已存入記憶體")
+    trace.add("Sub Agent 分析", "done",
+              f"共 {n_issues} 個問題（每類最多 {MAX_ISSUES_PER_CATEGORY} 個），已存入記憶體")
 
     # ---- 7：重繪符合標準的設計向量圖 -------------------------------------
     trace.add("重繪設計", "running", "依三份問題清單重畫路口向量圖")
@@ -318,23 +323,30 @@ async def _analyze(lat: float, lng: float, size_m: float) -> dict:
     design_fc = vision.norm_features_to_geojson(
         redesign_res.get("features"), frame, REDESIGN_LAYERS, source="redesign_agent"
     )
+    annotations = _clean_annotations(redesign_res.get("annotations"))
     result["design"] = {
         "name": redesign_res.get("design_name"),
         "summary": redesign_res.get("design_summary"),
-        "key_changes": redesign_res.get("key_changes", []),
+        "key_changes": redesign_res.get("key_changes", [])[:4],
+        "annotations": annotations,
         "geojson": design_fc,
     }
     memory.put(session_id, "design", result["design"])
-    trace.add("重繪設計", "done", f"產生 {len(design_fc['features'])} 條設計線形")
+    trace.add("重繪設計", "done",
+              f"產生 {len(design_fc['features'])} 條設計線形、{len(annotations)} 個改動標記")
 
     # ---- 8：向量圖生成圖片 ----------------------------------------------
-    trace.add("生成設計圖", "running", "把向量圖繪製成圖片")
+    trace.add("生成設計圖", "running", "繪製設計圖與改動標示圖")
     result["design_image"] = render.render_design(
         design_fc, frame, base_png, redesign_res.get("design_name") or "改善設計"
     )
-    note = "以向量圖繪製 PNG 完成"
+    # 給看不懂工程圖的人：淡底 + 編號標記，直接指出哪裡改了
+    result["annotated_image"] = render.render_annotated(
+        base_png, design_fc, frame, annotations
+    )
+    note = "向量圖與改動標示圖完成"
     if option("use_gemini_image_gen", False):
-        gen = await call_image(
+        gen, why = await call_image(
             "image_gen", "60_image_gen.md",
             user_text=redesign_res.get("design_summary") or "",
             ref_images=[base_png],
@@ -344,7 +356,8 @@ async def _analyze(lat: float, lng: float, size_m: float) -> dict:
             result["design_image_ai"] = "data:image/png;base64," + base64.b64encode(gen).decode()
             note += "；另附一張 AI 擬真圖"
         else:
-            note += "；AI 擬真圖生成失敗，僅回傳向量繪圖"
+            note += f"；AI 擬真圖失敗（{why}），改用向量繪圖"
+            trace.add("生成設計圖", "warning", f"image_gen 失敗：{why}")
     trace.add("生成設計圖", "done", note)
 
     # ---- 9：讀回記憶體 + 查經典案例 + 產出說明 ---------------------------
@@ -356,8 +369,10 @@ async def _analyze(lat: float, lng: float, size_m: float) -> dict:
     for cat in stored_findings.values():
         for issue in cat.get("issues", []):
             keywords += [issue.get("title", ""), issue.get("standard_violated", "")]
-    case = cases.find_case(itype, keywords)
-    result["classic_case"] = case
+    matched = cases.find_cases(itype, keywords, limit=3)
+    case = matched[0] if matched else None
+    result["classic_cases"] = matched      # 前端顯示三欄
+    result["classic_case"] = case          # 報告 Agent 只吃最相符的那一個
     if case is None:
         trace.add("彙整報告", "warning",
                   f"經典案例資料夾（{cases_dir().name}/）沒有符合「{itype}」的案例，"
@@ -424,13 +439,49 @@ def _coerce_sub(res, category: str) -> dict:
             "overall_note": "模型回傳的格式無法解析"}
 
 
+def _clean_annotations(raw, limit: int = 4) -> list[dict]:
+    """整理改動標記：座標必須在畫面內，標籤要短，彼此不能疊在一起。"""
+    out: list[dict] = []
+    for a in raw or []:
+        if not isinstance(a, dict):
+            continue
+        try:
+            nx, ny = float(a["point"][0]), float(a["point"][1])
+        except (TypeError, ValueError, IndexError, KeyError):
+            continue
+        if not (0.0 <= nx <= 1.0 and 0.0 <= ny <= 1.0):
+            continue
+        nx, ny = min(max(nx, 0.06), 0.94), min(max(ny, 0.06), 0.94)
+        # 標記與標籤都放大之後，太近的兩個標籤會擠成一團，後來的直接丟掉
+        if any(abs(nx - o["point"][0]) < 0.14 and abs(ny - o["point"][1]) < 0.14
+               for o in out):
+            continue
+        label = str(a.get("label") or "").strip()[:12]
+        if not label:
+            continue
+        out.append({"point": [round(nx, 3), round(ny, 3)], "label": label,
+                    "addresses": a.get("addresses") or []})
+        if len(out) >= limit:
+            break
+    return out
+
+
+def _trim_issues(res: dict) -> dict:
+    """只留最嚴重的幾個問題 —— 畫面塞太多條使用者根本讀不完。"""
+    issues = res.get("issues") or []
+    issues.sort(key=lambda i: _SEVERITY_RANK.get(
+        str(i.get("severity", "")).lower(), 9))
+    res["issues"] = issues[:MAX_ISSUES_PER_CATEGORY]
+    return res
+
+
 async def _sub(role: str, prompt_file: str, category: str,
                user_text: str, image_png: bytes) -> dict:
     try:
         res = await call_json(role=role, prompt_file=prompt_file,
                               user_text=user_text, image_png=image_png,
                               temperature=0.25)
-        return _coerce_sub(res, category)
+        return _trim_issues(_coerce_sub(res, category))
     except Exception as exc:
         return {"category": category, "overall_note": f"分析失敗：{exc}",
                 "issues": [], "error": str(exc)[:300]}

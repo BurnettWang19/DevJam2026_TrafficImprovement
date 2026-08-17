@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import os
 import sys
 import traceback
 from pathlib import Path
@@ -16,11 +17,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 import pipeline
 from config import (GEMINI_API_KEY, GOOGLE_MAPS_API_KEY, MAX_SIZE_M, MIN_SIZE_M,
-                    load_models, load_prompt)
+                    ROOT_DIR, load_models, load_prompt)
 from services import cache, cases, imagery, memory
 
 app = FastAPI(title="路口設計品質分析 API", version="0.1.0")
@@ -108,6 +110,20 @@ async def analyze(req: AnalyzeRequest) -> dict:
         raise HTTPException(500, f"分析失敗：{exc}") from exc
 
 
+# ---------------------------------------------------------------------------
+# 前端靜態檔。開發時用 vite dev server（走 /api proxy），這段不會生效；
+# 容器裡則由 FastAPI 直接 serve build 產物，一個服務、一個網址、不用設 CORS。
+# 必須掛在所有 /api 路由「之後」，否則會把 API 請求吃掉。
+# ---------------------------------------------------------------------------
+_DIST = ROOT_DIR / "frontend" / "dist"
+if _DIST.is_dir():
+    app.mount("/", StaticFiles(directory=str(_DIST), html=True), name="frontend")
+
+
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run("main:app", host="127.0.0.1", port=8000, reload=True)
+    # Cloud Run 等平台會用 PORT 環境變數指定埠號，並要求綁 0.0.0.0
+    port = int(os.getenv("PORT", "8000"))
+    host = os.getenv("HOST", "127.0.0.1" if os.getenv("PORT") is None else "0.0.0.0")
+    uvicorn.run("main:app", host=host, port=port,
+                reload=os.getenv("RELOAD", "").lower() in ("1", "true"))

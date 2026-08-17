@@ -1,0 +1,23 @@
+# 機密：絕對不要進映像（金鑰用平台的環境變數／Secret Manager 注入）
+.env
+.env.*
+!.env.example
+
+# 本機環境
+backend/.venv/
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+**/__pycache__/
+*.pyc
+
+# git 與文件
+.git/
+.gitignore
+.gitattributes
+.claude/
+*.md
+!example/README.md
+
+# 若不想把預熱快取打包進映像，取消下面這行的註解
+# backend/.cache/

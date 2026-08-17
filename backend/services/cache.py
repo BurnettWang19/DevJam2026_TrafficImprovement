@@ -21,11 +21,20 @@ CACHE_DIR = BACKEND_DIR / ".cache"
 
 
 def fingerprint() -> str:
-    """prompts/ + models.yaml 的內容指紋。任一改動都會產生新的快取空間。"""
+    """會影響輸出內容的所有檔案的指紋。
+
+    涵蓋 models.yaml、prompts/、以及後端程式碼 —— 改了繪圖配色或流程結構，
+    舊快取就必須失效，否則 demo 會拿到跟現行程式不符的舊圖。
+    """
     h = hashlib.sha256()
     try:
         h.update(MODELS_YAML.read_bytes())
-        for p in sorted(PROMPTS_DIR.glob("*.md")):
+        sources = sorted(PROMPTS_DIR.glob("*.md"))
+        sources += sorted(BACKEND_DIR.glob("*.py"))
+        sources += sorted((BACKEND_DIR / "services").glob("*.py"))
+        for p in sources:
+            if p.name == "prewarm.py":      # 只是入口腳本，不影響結果
+                continue
             h.update(p.name.encode("utf-8"))
             h.update(p.read_bytes())
     except OSError:
@@ -97,3 +106,26 @@ def clear() -> int:
         except OSError:
             pass
     return n
+
+
+def prune() -> tuple[int, float]:
+    """只刪掉「舊指紋」的快取，保留目前這一版。
+
+    每次改 prompt 或程式都會產生一組新指紋，舊的檔案就變成純垃圾。
+    要把快取打包進 Docker 映像時，這一步能省下大量體積。
+    回傳 (刪除檔數, 釋放的 MB)。
+    """
+    if not CACHE_DIR.is_dir():
+        return 0, 0.0
+    keep = f"_{fingerprint()}.json"
+    n, freed = 0, 0
+    for path in CACHE_DIR.glob("*.json"):
+        if path.name.endswith(keep):
+            continue
+        try:
+            freed += path.stat().st_size
+            path.unlink()
+            n += 1
+        except OSError:
+            pass
+    return n, round(freed / 1024 / 1024, 1)

@@ -1,233 +1,423 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 
 const props = defineProps({ result: { type: Object, required: true } })
+const emit = defineEmits(['back'])
 
 const r = computed(() => props.result)
-const sev = { high: '重大', medium: '中等', low: '輕微', uncertain: '待確認' }
+
+/* 嚴重程度：後端給 high/medium/low/uncertain，介面顯示中文 */
+const SEV = {
+  high: { label: '高度', cls: 'high' },
+  critical: { label: '極高', cls: 'crit' },
+  medium: { label: '中度', cls: 'mid' },
+  low: { label: '低度', cls: 'low' },
+  uncertain: { label: '待確認', cls: 'mid' },
+}
+const sev = (s) => SEV[String(s || '').toLowerCase()] || SEV.uncertain
+
+/* 分數不再直接呈現數字，改成四個等級 */
+const BANDS = [
+  { min: 75, key: 'good', label: '完善' },
+  { min: 50, key: 'ok', label: '尚可' },
+  { min: 25, key: 'weak', label: '待加強' },
+  { min: 0, key: 'bad', label: '嚴重' },
+]
+const band = computed(() => {
+  const s = r.value.score?.score
+  if (typeof s !== 'number') return { key: 'unknown', label: '資料不足' }
+  return BANDS.find((b) => s >= b.min) || BANDS[BANDS.length - 1]
+})
+
+/* 依 斑馬線 → 人行道 → 車道標線 排序，同類再依嚴重度 */
+const CAT_ORDER = ['斑馬線', '人行道', '車道標線']
+const SEV_ORDER = { critical: 0, high: 1, medium: 2, low: 3, uncertain: 4 }
 
 const allIssues = computed(() => {
   const out = []
   for (const cat of Object.values(r.value.findings || {})) {
     for (const i of cat.issues || []) out.push({ ...i, category: cat.category })
   }
-  const order = { high: 0, medium: 1, low: 2, uncertain: 3 }
-  return out.sort((a, b) => (order[a.severity] ?? 9) - (order[b.severity] ?? 9))
+  return out.sort((a, b) => {
+    const c = CAT_ORDER.indexOf(a.category) - CAT_ORDER.indexOf(b.category)
+    if (c !== 0) return c
+    return (SEV_ORDER[a.severity] ?? 9) - (SEV_ORDER[b.severity] ?? 9)
+  })
+})
+
+const cases = computed(() => r.value.classic_cases
+  || (r.value.classic_case ? [r.value.classic_case] : []))
+
+const annotations = computed(() => r.value.design?.annotations || [])
+// 預設看乾淨的設計圖；要看說明的人自己切過去
+const showMarks = ref(false)
+
+/* 報告改成條列。舊格式（長段落）仍相容，切成句子當作條列。 */
+const toPoints = (list, fallback) => {
+  if (Array.isArray(list) && list.length) return list.filter(Boolean)
+  if (typeof fallback === 'string' && fallback.trim()) {
+    return fallback.split(/[。；\n]/).map((s) => s.trim()).filter(Boolean).slice(0, 3)
+  }
+  return []
+}
+const problemPoints = computed(() =>
+  toPoints(r.value.report?.problem_points, r.value.report?.problem_narrative))
+const improvePoints = computed(() =>
+  toPoints(r.value.report?.improvement_points, r.value.report?.improvement_narrative))
+
+const coords = computed(() => {
+  const i = r.value.input || {}
+  return `${Number(i.lat).toFixed(4)}, ${Number(i.lng).toFixed(4)}`
 })
 </script>
 
 <template>
-  <div class="wrap">
-    <div class="cachebar" v-if="r.cached">
-      ⚡ 這是 <b>{{ r.cached_at }}</b> 預先跑好的快取結果，未重新呼叫模型。
-      左側「↻ 重新分析（跳過快取）」可當場實際跑一次。
-    </div>
+  <div class="review">
+    <!-- ── 頁首 ──────────────────────────────────────────── -->
+    <header class="head">
+      <button class="back" @click="emit('back')">← 重新選擇路口</button>
 
-    <!-- ── 非路口 ───────────────────────────────── -->
-    <div v-if="r.verdict === 'not_intersection'" class="card verdict bad">
-      <h2>非路口</h2>
-      <p>{{ r.message }}</p>
-      <p class="muted" v-if="r.intersection_type">
-        判定信心 {{ r.intersection_type.confidence }} — 判斷迴圈已中斷，未進行後續分析。
-      </p>
-      <img v-if="r.current_image" :src="r.current_image" alt="現況向量圖" />
-    </div>
-
-    <!-- ── 無重大問題 ───────────────────────────── -->
-    <div v-else-if="r.verdict === 'no_problem'" class="card verdict good">
-      <h2>No Problem — 此路口設計無重大問題</h2>
-      <div class="scorebar">
-        <div class="num">{{ r.score?.score ?? '—' }}<small>/100</small></div>
-        <p>{{ r.message }}</p>
-      </div>
-      <ul class="criteria">
-        <li v-for="(c, i) in r.score?.criteria || []" :key="i">
-          <span>{{ c.name }}</span>
-          <b class="mono">{{ c.score }}/{{ c.max }}</b>
-          <em class="muted">{{ c.comment }}</em>
-        </li>
-      </ul>
-      <img v-if="r.current_image" :src="r.current_image" alt="現況向量圖" />
-    </div>
-
-    <!-- ── 有問題，已產生改善設計 ───────────────── -->
-    <template v-else>
-      <div class="card verdict warn">
-        <div class="topline">
-          <h2>{{ r.report?.headline || '此路口有設計問題' }}</h2>
-          <span class="tag">{{ r.intersection_type?.type }}</span>
-        </div>
-        <div class="scorebar">
-          <div class="num">{{ r.score?.score ?? '—' }}<small>/100</small></div>
-          <p>{{ r.score?.summary }}</p>
-        </div>
-        <ul class="criteria">
-          <li v-for="(c, i) in r.score?.criteria || []" :key="i">
-            <span><b class="mono cid">{{ c.criterion }}</b> {{ c.name }}</span>
-            <b class="mono">{{ c.score == null ? '—' : c.score }}</b>
-            <em :class="['st', (c.status || '').toLowerCase()]">{{ c.status }}</em>
-            <em class="muted">{{ (c.issues || []).map(x => x.issue).join('；') || c.comment }}</em>
-          </li>
-        </ul>
-      </div>
-
-      <!-- 前後對照 -->
-      <div class="card">
-        <h3>設計前後對照</h3>
-        <div class="compare">
-          <figure>
-            <img :src="r.current_image" alt="現況" />
-            <figcaption>現況（OSM + 視覺辨識向量）</figcaption>
-          </figure>
-          <figure>
-            <img :src="r.design_image" alt="改善設計" />
-            <figcaption>{{ r.design?.name || '改善設計' }}</figcaption>
-          </figure>
-        </div>
-        <p class="attrib muted" v-if="r.imagery">
-          底圖：{{ r.imagery.attribution }} · zoom {{ r.imagery.zoom }} ·
-          {{ r.imagery.meters_per_pixel }} m/px
+      <div class="title">
+        <p class="eyebrow">Road Design Review</p>
+        <h1>
+          {{ r.verdict === 'not_intersection' ? '此範圍並非路口'
+            : r.verdict === 'no_problem' ? '路口設計檢核' : '路口改善建議' }}
+        </h1>
+        <p class="sub">
+          {{ r.verdict === 'not_intersection'
+            ? '判斷迴圈已中斷，未進行後續的問題診斷與重繪。'
+            : r.verdict === 'no_problem'
+              ? '分析完成，此路口未發現重大設計問題。'
+              : '分析完成，以下是依現況問題提出的概念改善方向。' }}
         </p>
-        <figure v-if="r.design_image_ai" class="ai">
-          <img :src="r.design_image_ai" alt="AI 擬真圖" />
-          <figcaption>AI 生成的擬真示意圖</figcaption>
+      </div>
+
+      <div class="badge" :class="band.key" v-if="r.verdict !== 'not_intersection'">
+        <b>{{ band.label }}</b>
+        <small>設計評估</small>
+      </div>
+    </header>
+
+    <div class="cachebar" v-if="r.cached">
+      這是 <b>{{ r.cached_at }}</b> 預先跑好的結果，未重新呼叫模型。
+    </div>
+
+    <!-- ── 基本資訊列 ────────────────────────────────────── -->
+    <div class="metabar">
+      <div><span>分析位置</span><b class="mono">{{ coords }}</b></div>
+      <div><span>路口型態</span><b>{{ r.intersection_type?.type || '—' }}</b></div>
+      <div>
+        <span>證據涵蓋</span>
+        <b>{{ r.score?.data_sufficient === false ? '證據不足' : '依現有資料' }}</b>
+      </div>
+      <div><span>資料來源</span><b>OSM・影像辨識</b></div>
+    </div>
+
+    <!-- ── 非路口 ────────────────────────────────────────── -->
+    <template v-if="r.verdict === 'not_intersection'">
+      <div class="notice">{{ r.message }}</div>
+      <figure class="single">
+        <img :src="r.current_image" alt="現況向量圖" />
+        <figcaption>現況：衛星影像與 OSM／影像辨識向量</figcaption>
+      </figure>
+    </template>
+
+    <template v-else>
+      <!-- ── 前後對照 ──────────────────────────────────── -->
+      <div class="compare" :class="{ single: !r.design_image }">
+        <figure>
+          <img :src="r.current_image" alt="改善前" />
+          <figcaption class="tag light">改善前<span>衛星影像與現況向量</span></figcaption>
         </figure>
-        <p class="muted">{{ r.design?.summary }}</p>
+        <figure v-if="r.design_image_ai || r.design_image">
+          <img :src="r.design_image_ai || r.design_image" alt="建議方案" />
+          <figcaption class="tag dark">
+            建議方案<span>{{ r.design_image_ai ? 'AI 概念示意圖' : '設計向量圖' }}</span>
+          </figcaption>
+        </figure>
       </div>
 
-      <!-- 原有問題（讀自記憶體） -->
-      <div class="card">
-        <h3>這個路口原本的問題</h3>
-        <p class="narrative">{{ r.report?.problem_narrative }}</p>
-        <ul class="issues">
-          <li v-for="it in allIssues" :key="it.id">
-            <div class="ih">
-              <span class="pill" :class="it.severity">{{ sev[it.severity] || it.severity }}</span>
-              <span class="cat">{{ it.category }}</span>
-              <strong>{{ it.title }}</strong>
-            </div>
-            <div class="loc muted">位置：{{ it.location }}</div>
-            <div class="ev">{{ it.evidence }}</div>
-            <div class="sol"><b>解方</b>{{ it.solution }}</div>
-          </li>
-        </ul>
+      <div class="attrib" v-if="r.imagery">
+        底圖 {{ r.imagery.attribution }}・zoom {{ r.imagery.zoom }}・{{ r.imagery.meters_per_pixel }} m/px
       </div>
 
-      <!-- 經典案例 -->
-      <div class="card" v-if="r.classic_case">
-        <h3>經典案例對照</h3>
-        <div class="case">
-          <img v-if="r.classic_case.image_data_url" :src="r.classic_case.image_data_url"
-               :alt="r.classic_case.name" />
+      <!-- ── 設計圖，需要說明的人再切到標示版 ────────── -->
+      <section class="marked" v-if="r.design_image">
+        <div class="markedhead">
           <div>
-            <h4>{{ r.classic_case.name }}
-              <small class="muted">{{ r.classic_case.country }}</small></h4>
-            <p>{{ r.classic_case.summary }}</p>
-            <ul>
-              <li v-for="(w, i) in r.classic_case.why_it_works || []" :key="i">{{ w }}</li>
-            </ul>
+            <p class="eyebrow">Proposed Design</p>
+            <h2>改善後的設計</h2>
+          </div>
+          <div class="toggle" v-if="r.annotated_image && annotations.length">
+            <button :class="{ on: !showMarks }" @click="showMarks = false">設計圖</button>
+            <button :class="{ on: showMarks }" @click="showMarks = true">標示改動位置</button>
           </div>
         </div>
-        <p class="narrative" v-if="r.report?.case_narrative">{{ r.report.case_narrative }}</p>
-      </div>
-      <div class="card muted" v-else>
-        經典案例資料夾中沒有符合「{{ r.intersection_type?.type }}」的案例，
-        可在 <code class="mono">經典案例/index.json</code> 補上。
-      </div>
+        <img class="markedimg"
+             :src="showMarks ? r.annotated_image : r.design_image"
+             :alt="showMarks ? '改動標示圖' : '設計向量圖'" />
+      </section>
 
-      <!-- 改善說明 -->
-      <div class="card">
-        <h3>新設計如何改善</h3>
-        <p class="narrative">{{ r.report?.improvement_narrative }}</p>
-        <ol class="improve">
-          <li v-for="(im, i) in r.report?.improvements || []" :key="i">
-            <div class="row"><span class="k">問題</span>{{ im.problem }}</div>
-            <div class="row"><span class="k on">改動</span>{{ im.change }}</div>
-            <div class="row"><span class="k">效果</span>{{ im.effect }}</div>
-          </li>
-        </ol>
-      </div>
+      <!-- ── 問題 / 改善（條列） ──────────────────────── -->
+      <section class="twocol" v-if="problemPoints.length || improvePoints.length">
+        <div v-if="problemPoints.length">
+          <p class="eyebrow">Why It Matters</p>
+          <h2>我們發現的問題</h2>
+          <ul class="points bad"><li v-for="(p, i) in problemPoints" :key="i">{{ p }}</li></ul>
+        </div>
+        <div v-if="improvePoints.length">
+          <p class="eyebrow">Proposed Design</p>
+          <h2>新版設計如何改善</h2>
+          <ul class="points good"><li v-for="(p, i) in improvePoints" :key="i">{{ p }}</li></ul>
+        </div>
+      </section>
+
+      <section class="twocol" v-else-if="r.verdict === 'no_problem'">
+        <div>
+          <p class="eyebrow">Assessment</p>
+          <h2>檢核結果</h2>
+          <p>{{ r.message || r.score?.summary }}</p>
+        </div>
+      </section>
+
+      <!-- ── 問題卡片 ──────────────────────────────────── -->
+      <section class="issues" v-if="allIssues.length">
+        <div class="card issue" v-for="(it, i) in allIssues" :key="it.id || i">
+          <div class="top">
+            <span class="cat">{{ it.category }}</span>
+            <span class="pill" :class="sev(it.severity).cls">{{ sev(it.severity).label }}</span>
+          </div>
+          <h3>{{ it.title }}</h3>
+          <p class="desc">{{ it.evidence || it.standard_violated }}</p>
+          <p class="fix" v-if="it.solution">{{ it.solution }}</p>
+        </div>
+      </section>
+
+      <!-- ── 經典案例 ──────────────────────────────────── -->
+      <section class="cases" v-if="cases.length">
+        <div class="caseshead">
+          <div>
+            <p class="eyebrow">Reference Cases</p>
+            <h2>相似的經典案例</h2>
+          </div>
+          <p class="note">依路口型態與問題標籤匹配，提供設計脈絡而非直接套用。</p>
+        </div>
+
+        <div class="casegrid">
+          <article class="card" v-for="c in cases" :key="c.id">
+            <img v-if="c.image_data_url" :src="c.image_data_url" :alt="c.name" />
+            <p class="where">{{ c.country }}</p>
+            <h4>{{ c.name }}</h4>
+            <p class="desc">{{ c.summary }}</p>
+            <p class="fix">{{ c.match_reason }}</p>
+          </article>
+        </div>
+      </section>
+
+      <!-- ── 逐條改善對應 ──────────────────────────────── -->
+      <section class="improve" v-if="r.report?.improvements?.length">
+        <p class="eyebrow">Change Log</p>
+        <h2>逐項對應</h2>
+        <div class="rows">
+          <div class="row card" v-for="(im, i) in r.report.improvements" :key="i">
+            <div><span>問題</span><p>{{ im.problem }}</p></div>
+            <div><span>改動</span><p class="hl">{{ im.change }}</p></div>
+            <div><span>效果</span><p>{{ im.effect }}</p></div>
+          </div>
+        </div>
+      </section>
     </template>
   </div>
 </template>
 
 <style scoped>
-.wrap { display: flex; flex-direction: column; gap: 14px; }
+.review { display: flex; flex-direction: column; gap: 28px; max-width: 1180px; margin: 0 auto; }
+
+/* ── 頁首 ─────────────────────────────────────────────── */
+.head {
+  display: grid;
+  grid-template-columns: 180px 1fr 120px;
+  align-items: start;
+  gap: 20px;
+  padding-top: 8px;
+}
+.back {
+  background: none; border: none; padding: 6px 0;
+  color: var(--text-2); font-size: 14px;
+}
+.back:hover { background: none; color: var(--green-700); }
+.title { text-align: center; }
+.title h1 {
+  margin: 0 0 10px;
+  font-size: 42px; line-height: 1.2; font-weight: 800;
+  color: var(--green-900); letter-spacing: -.01em;
+}
+.title .sub { margin: 0; color: var(--text-2); }
+
+.badge {
+  justify-self: end;
+  width: 112px; height: 112px; border-radius: 50%;
+  display: grid; place-content: center; text-align: center;
+  background: var(--green-900); color: #eef3ec;
+}
+.badge b { display: block; font-size: 26px; font-weight: 800; line-height: 1.15; }
+.badge small { font-size: 11px; opacity: .72; letter-spacing: .06em; }
+.badge.weak { background: #b8721c; }
+.badge.bad { background: #a8412c; }
+.badge.unknown { background: #7b837c; }
+
 .cachebar {
-  background: #1e3a4d; border: 1px solid #2b5570; color: #bae6fd;
-  border-radius: 10px; padding: 9px 14px; font-size: 12.5px;
+  background: var(--sage); border: 1px solid #d5e0d2; color: var(--green-800);
+  border-radius: 12px; padding: 10px 16px; font-size: 13px;
 }
-h2 { margin: 0 0 8px; font-size: 18px; }
-h3 { margin: 0 0 12px; font-size: 15px; }
-h4 { margin: 0 0 6px; font-size: 14px; }
-img { width: 100%; border-radius: 8px; display: block; border: 1px solid var(--line); }
 
-.verdict { border-left: 3px solid var(--line); }
-.verdict.good { border-left-color: var(--accent); }
-.verdict.warn { border-left-color: var(--warn); }
-.verdict.bad { border-left-color: var(--bad); }
+/* ── 基本資訊列 ───────────────────────────────────────── */
+.metabar {
+  display: grid; grid-template-columns: repeat(4, 1fr);
+  background: var(--surface); border: 1px solid var(--line-soft);
+  border-radius: 14px; overflow: hidden;
+}
+.metabar > div { padding: 14px 20px; border-left: 1px solid var(--line-soft); }
+.metabar > div:first-child { border-left: none; }
+.metabar span { display: block; font-size: 12px; color: var(--muted); }
+.metabar b { font-weight: 600; color: var(--text); }
 
-.topline { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+/* ── 圖片 ─────────────────────────────────────────────── */
+.compare { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.compare.single { grid-template-columns: 1fr; }
+.compare figure, .single figure { margin: 0; position: relative; }
+.compare img, .single img {
+  width: 100%; display: block; border-radius: 16px; border: 1px solid var(--line-soft);
+}
 .tag {
-  flex: none; font-size: 12px; padding: 2px 10px; border-radius: 999px;
-  background: #1e3a4d; color: var(--accent-2); border: 1px solid #2b5570;
+  position: absolute; top: 16px; left: 16px;
+  display: flex; align-items: baseline; gap: 8px;
+  padding: 7px 15px; border-radius: 999px;
+  font-weight: 700; font-size: 14px;
+}
+.tag span { font-weight: 400; font-size: 12.5px; opacity: .75; }
+.tag.light { background: rgba(255, 255, 255, .93); color: var(--green-900); }
+.tag.dark { background: var(--green-900); color: #eef3ec; }
+
+.single { margin: 0; }
+.single figcaption { font-size: 12.5px; color: var(--muted); padding-top: 8px; }
+.attrib { font-size: 11.5px; color: var(--muted); text-align: right; margin-top: -18px; }
+
+/* ── 改動標示 ─────────────────────────────────────────── */
+.marked {
+  background: var(--surface); border: 1px solid var(--line-soft);
+  border-radius: 18px; padding: 30px 34px 34px;
+}
+.markedhead {
+  display: flex; justify-content: space-between; align-items: flex-end;
+  gap: 20px; margin-bottom: 20px;
+}
+.markedhead h2 { margin: 0; font-size: 25px; font-weight: 800; color: var(--green-900); }
+.toggle {
+  display: flex; gap: 4px; padding: 4px;
+  background: var(--bg-sunken); border-radius: 999px; flex: none;
+}
+.toggle button {
+  border: none; background: none; border-radius: 999px;
+  padding: 6px 16px; font-size: 13px; color: var(--text-2);
+}
+.toggle button:hover { background: rgba(255, 255, 255, .6); }
+.toggle button.on {
+  background: var(--green-900); color: var(--bg); font-weight: 600;
+}
+.toggle button.on:hover { background: var(--green-800); }
+.markedimg {
+  width: 100%; display: block;
+  border-radius: 14px; border: 1px solid var(--line-soft);
 }
 
-.scorebar { display: flex; gap: 16px; align-items: center; margin: 10px 0; }
-.num { font-size: 34px; font-weight: 700; line-height: 1; }
-.num small { font-size: 14px; color: var(--muted); font-weight: 400; }
-.scorebar p { margin: 0; }
-
-.criteria { list-style: none; padding: 0; margin: 12px 0 0; }
-.criteria li {
-  display: grid; grid-template-columns: 220px 44px 120px 1fr; gap: 10px;
-  padding: 6px 0; border-top: 1px solid var(--line); font-size: 13px;
-  align-items: baseline;
+/* ── 條列 ─────────────────────────────────────────────── */
+.points { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.points li {
+  position: relative; padding-left: 24px; color: var(--text-2); font-size: 15px;
 }
-.criteria em { font-style: normal; }
-.cid { color: var(--accent-2); margin-right: 6px; }
-.st { font-size: 11px; letter-spacing: .3px; color: var(--muted); }
-.st.good { color: var(--accent); }
-.st.acceptable { color: #7dd3fc; }
-.st.problematic, .st.high_risk { color: var(--warn); }
-.st.critical { color: var(--bad); }
-.st.insufficient_data { color: #6b7280; }
-
-.compare { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.compare figure, .ai { margin: 0; }
-.ai { margin-top: 12px; }
-figcaption { font-size: 12px; color: var(--muted); padding-top: 6px; text-align: center; }
-
-.narrative { background: var(--panel-2); border-radius: 8px; padding: 12px; margin: 0 0 12px; }
-.attrib { font-size: 11.5px; margin: 10px 0 0; text-align: right; }
-
-.issues { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 10px; }
-.issues li { border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
-.ih { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
-.pill { font-size: 11px; padding: 1px 8px; border-radius: 999px; background: #2a3342; }
-.pill.high { background: #4a1f22; color: var(--bad); }
-.pill.medium { background: #4a3c14; color: var(--warn); }
-.pill.low { background: #1d4633; color: var(--accent); }
-.cat { font-size: 12px; color: var(--accent-2); }
-.loc, .ev { font-size: 13px; }
-.sol { margin-top: 6px; font-size: 13px; }
-.sol b { color: var(--accent); margin-right: 6px; }
-
-.case { display: grid; grid-template-columns: 220px 1fr; gap: 14px; align-items: start; }
-.case ul { margin: 6px 0 0; padding-left: 18px; font-size: 13px; }
-.case p { margin: 0; }
-
-.improve { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 12px; }
-.improve .row { font-size: 13px; }
-.improve .k {
-  display: inline-block; width: 38px; font-size: 11px; color: var(--muted);
-  margin-right: 8px;
+.points li::before {
+  content: ''; position: absolute; left: 2px; top: .62em;
+  width: 8px; height: 8px; border-radius: 50%;
 }
-.improve .k.on { color: var(--accent); }
+.points.bad li::before { background: var(--sev-high-fg); }
+.points.good li::before { background: var(--green-600); }
 
-@media (max-width: 900px) {
-  .compare, .case { grid-template-columns: 1fr; }
-  .criteria li { grid-template-columns: 1fr; gap: 2px; }
-  .criteria li b.mono { display: inline; }
+.notice {
+  background: var(--surface); border: 1px solid var(--line-soft);
+  border-left: 3px solid #a8412c; border-radius: 14px; padding: 18px 22px;
+}
+
+/* ── 兩欄敘述 ─────────────────────────────────────────── */
+.twocol {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 48px;
+  background: var(--surface); border: 1px solid var(--line-soft);
+  border-radius: 18px; padding: 34px 38px;
+}
+.twocol > div + div { border-left: 1px solid var(--line-soft); padding-left: 48px; margin-left: -48px; }
+.twocol h2 { margin: 0 0 14px; font-size: 25px; font-weight: 800; color: var(--green-900); }
+.twocol p { margin: 0; color: var(--text-2); }
+
+/* ── 問題卡片 ─────────────────────────────────────────── */
+.issues { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+.issue { padding: 24px 26px 28px; display: flex; flex-direction: column; }
+.top { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.cat { font-size: 13px; color: var(--muted); }
+.pill {
+  font-size: 12.5px; font-weight: 600; padding: 3px 13px; border-radius: 999px;
+  background: var(--sev-mid-bg); color: var(--sev-mid-fg);
+}
+.pill.high { background: var(--sev-high-bg); color: var(--sev-high-fg); }
+.pill.crit { background: var(--sev-crit-bg); color: var(--sev-crit-fg); }
+.pill.low { background: var(--sev-low-bg); color: var(--sev-low-fg); }
+
+.issue h3 {
+  margin: 14px 0 12px; font-size: 22px; line-height: 1.4;
+  font-weight: 800; color: var(--green-900); letter-spacing: -.01em;
+}
+.desc { margin: 0; color: var(--text-2); font-size: 14.5px; }
+.fix {
+  margin: 18px 0 0; font-weight: 700; color: var(--green-700); font-size: 14.5px;
+}
+
+/* ── 經典案例 ─────────────────────────────────────────── */
+.cases { background: var(--sage); border-radius: 22px; padding: 36px 38px 40px; }
+.caseshead {
+  display: flex; justify-content: space-between; align-items: flex-end;
+  gap: 24px; margin-bottom: 26px;
+}
+.caseshead h2 { margin: 0; font-size: 30px; font-weight: 800; color: var(--green-900); }
+.caseshead .note { margin: 0; font-size: 13px; color: var(--text-2); text-align: right; }
+.casegrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+.casegrid .card { padding: 22px 24px 26px; border-color: transparent; }
+.casegrid img {
+  width: 100%; border-radius: 10px; margin-bottom: 14px; display: block;
+  aspect-ratio: 16 / 10; object-fit: cover;
+}
+.where { margin: 0 0 4px; font-size: 12.5px; color: var(--muted); }
+.casegrid h4 { margin: 0 0 10px; font-size: 19px; font-weight: 800; color: var(--green-900); }
+
+/* ── 逐項對應 ─────────────────────────────────────────── */
+.improve h2 { margin: 0 0 18px; font-size: 25px; font-weight: 800; color: var(--green-900); }
+.rows { display: flex; flex-direction: column; gap: 12px; }
+.row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; padding: 20px 24px; }
+.row span { display: block; font-size: 11.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.row p { margin: 4px 0 0; font-size: 14.5px; color: var(--text-2); }
+.row p.hl { color: var(--green-700); font-weight: 600; }
+
+/* ── 窄螢幕 ───────────────────────────────────────────── */
+@media (max-width: 1100px) {
+  .issues, .casegrid { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 780px) {
+  .head { grid-template-columns: 1fr; }
+  .title { text-align: left; }
+  .title h1 { font-size: 32px; }
+  .badge { justify-self: start; }
+  .metabar { grid-template-columns: 1fr 1fr; }
+  .metabar > div:nth-child(odd) { border-left: none; }
+  .compare, .issues, .casegrid, .row { grid-template-columns: 1fr; }
+  .twocol { grid-template-columns: 1fr; gap: 28px; padding: 26px; }
+  .twocol > div + div { border-left: none; padding-left: 0; margin-left: 0; padding-top: 24px; border-top: 1px solid var(--line-soft); }
 }
 </style>

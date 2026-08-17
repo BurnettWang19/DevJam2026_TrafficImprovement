@@ -22,6 +22,16 @@
 
 `roadway`（車道中心線）、`sidewalk`（人行道）、`crossing`（斑馬線）、`lane_marking`（車道標線）、`stop_line`（停止線）、`channelization`（槽化／導引線）、`median`（中央分隔島）、`refuge_island`（行人庇護島）、`bulb_out`（人行道外推段）、`corner_radius`（轉角緣石弧線）
 
+## 標註改動位置（重要，給看不懂工程圖的人用）
+
+除了向量圖之外，你還要輸出 `annotations` —— **3 到 5 個**編號標記，
+直接標在圖上告訴讀者「這裡改了什麼」。
+
+- `point`：標記要放的位置，同樣是 0.0~1.0 的正規化影像座標
+- `label`：**10 個字以內**的白話短語，例如「轉角外推」「斑馬線退縮5m」「加設庇護島」
+- 不要標在圖片最外緣（x、y 都保持在 0.08~0.92 之間），否則標記會被裁掉
+- 幾個標記不要擠在同一點，彼此至少距離 0.12
+
 ## 輸出格式
 
 只輸出 JSON：
@@ -29,7 +39,7 @@
 ```json
 {
   "design_name": "退縮式受保護路口改善方案",
-  "design_summary": "兩句以內說明整體改造策略",
+  "design_summary": "一句話說明整體改造策略，40 字以內",
   "features": [
     {
       "layer": "bulb_out",
@@ -38,9 +48,14 @@
       "addresses": ["sw-1"]
     }
   ],
+  "annotations": [
+    { "point": [0.40, 0.42], "label": "轉角外推", "addresses": ["sw-1"] },
+    { "point": [0.50, 0.30], "label": "斑馬線退縮5m", "addresses": ["cw-1"] },
+    { "point": [0.62, 0.55], "label": "車道偏心1.5m", "addresses": ["lm-1"] }
+  ],
   "key_changes": [
     {
-      "change": "四個轉角設置外推段並將緣石半徑縮至 6 公尺",
+      "change": "四個轉角外推、緣石半徑縮至 6 公尺",
       "addresses": ["sw-1"],
       "rationale": "縮短穿越距離並壓低右轉車速"
     }
@@ -48,5 +63,6 @@
 }
 ```
 
+- `key_changes` 最多 4 條；`change` 20 字以內、`rationale` 20 字以內。
 - `addresses` 填 Sub Agent 問題清單中的 `id`（例如 `sw-1`、`cw-2`、`lm-1`），沒有對應就給空陣列。
-- `label`、`design_summary`、`rationale` 全部用繁體中文。
+- `label`、`design_summary`、`change`、`rationale` 全部用繁體中文。
