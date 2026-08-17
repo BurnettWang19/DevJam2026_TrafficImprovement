@@ -1,0 +1,70 @@
+:root {
+  --bg: #0b0e14;
+  --panel: #141922;
+  --panel-2: #1b2230;
+  --line: #2a3342;
+  --text: #e6e9ef;
+  --muted: #98a2b3;
+  --accent: #4ade80;
+  --accent-2: #38bdf8;
+  --warn: #fbbf24;
+  --bad: #f87171;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #app { height: 100%; margin: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Noto Sans TC", "Microsoft JhengHei", -apple-system, "Segoe UI", sans-serif;
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--text);
+  padding: 8px 14px;
+  transition: background .15s, border-color .15s;
+}
+button:hover:not(:disabled) { background: #232c3c; border-color: #3a465a; }
+button:disabled { opacity: .5; cursor: not-allowed; }
+
+button.primary {
+  background: linear-gradient(180deg, #2f7d5a, #256349);
+  border-color: #3b9b71;
+  font-weight: 600;
+}
+button.primary:hover:not(:disabled) { background: linear-gradient(180deg, #38956b, #2b7454); }
+
+input {
+  font: inherit;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: #0f141d;
+  color: var(--text);
+}
+input:focus { outline: none; border-color: var(--accent-2); }
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.muted { color: var(--muted); }
+.mono { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; }
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: #2a3342; border-radius: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
