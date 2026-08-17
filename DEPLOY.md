@@ -205,11 +205,40 @@ gcloud run deploy intersection-audit \
 
 ---
 
+## 歷史紀錄（GCS，選用）
+
+每次分析完成後，後端會把**輕量摘要**（約 350 bytes / 筆：座標、路名、verdict、
+分數、問題標題、費用區間，不含圖片）背景寫入 GCS。前端控制盒會多一個
+「歷史紀錄」清單，點一筆就飛到該地點。
+
+啟用步驟：
+
+```bash
+# 1. 建 bucket（名稱自取，需全域唯一）
+gcloud storage buckets create gs://你的bucket名 --location=asia-east1
+
+# 2. Cloud Run：讓執行服務帳戶能讀寫（PROJECT_NUMBER 換成你的）
+gcloud storage buckets add-iam-policy-binding gs://你的bucket名 \
+  --member="serviceAccount:PROJECT_NUMBER-compute@developer.gserviceaccount.com" \
+  --role="roles/storage.objectAdmin"
+
+# 3. 部署時帶環境變數
+gcloud run deploy ... --set-env-vars GCS_HISTORY_BUCKET=你的bucket名
+```
+
+本機開發要先 `gcloud auth application-default login`，並在 `.env` 加
+`GCS_HISTORY_BUCKET=你的bucket名`。
+
+**留空 = 功能停用**，主流程完全不受影響（寫入失敗也只是靜默略過）。
+
+---
+
 ## 環境變數
 
 | 變數 | 位置 | 必填 | 說明 |
 |---|---|---|---|
 | `GEMINI_API_KEY` | Render 後台 | ✅ | 七個代理人角色都用這把 |
 | `GOOGLE_MAPS_API_KEY` | Render 後台 | | 留空自動改用 Esri（免金鑰） |
+| `GCS_HISTORY_BUCKET` | Cloud Run 環境變數 / `.env` | | 歷史紀錄 bucket，留空停用 |
 | `VITE_API_BASE` | `frontend/.env.production` | ✅ | 後端網址；留空則走相對路徑 |
 | `PORT` / `HOST` | 平台自動注入 | | 容器內為 `8080` / `0.0.0.0` |

@@ -22,6 +22,7 @@ const mapRef = ref(null)
 
 const PRESETS = [
   { name: '忠孝東路×敦化南路', lat: 25.0417, lng: 121.549, size: 140 },
+  { name: '公館圓環', lat: 25.0111, lng: 121.5367, size: 180 },
   { name: '信義路五段（測非路口）', lat: 25.033139, lng: 121.564469, size: 120 },
   { name: '台灣大道×文心路', lat: 24.163889, lng: 120.646111, size: 160 },
   { name: '阿姆斯特丹', lat: 52.350556, lng: 4.868889, size: 140 },
@@ -30,7 +31,30 @@ const PRESETS = [
 async function refreshHealth() {
   try { health.value = await apiGet('/api/health') } catch { health.value = { ok: false } }
 }
-onMounted(refreshHealth)
+
+/* 歷史紀錄（GCS）。後端未設定 bucket 時 enabled=false，區塊直接不顯示 */
+const historyList = ref([])
+async function loadHistory() {
+  try {
+    const res = await apiGet('/api/history?limit=12')
+    historyList.value = res.enabled ? res.records : []
+  } catch { historyList.value = [] }
+}
+onMounted(() => { refreshHealth(); loadHistory() })
+
+const VERDICT_LABEL = {
+  improved: '已改善', no_problem: '無問題', not_intersection: '非路口',
+}
+function historyName(h) {
+  if (h.roads?.length) return h.roads.slice(0, 2).join(' × ')
+  return `${Number(h.lat).toFixed(3)}, ${Number(h.lng).toFixed(3)}`
+}
+function useHistory(h) {
+  if (!Number.isFinite(h.lat) || !Number.isFinite(h.lng)) return
+  onPick(h.lat, h.lng)
+  if (h.size_m) form.sizeM = h.size_m
+  mapRef.value?.flyTo(h.lat, h.lng)
+}
 
 function onPick(lat, lng) {
   form.lat = +lat.toFixed(6)
@@ -85,6 +109,7 @@ function onGameFinished() {
   loading.value = false
   forcing.value = false
   refreshHealth()
+  loadHistory()      // 這次分析已背景寫入 GCS，順手更新清單
 }
 
 function backToMap() {
@@ -151,6 +176,19 @@ function backToMap() {
             <div class="presets">
               <button v-for="p in PRESETS" :key="p.name" @click="usePreset(p)">
                 {{ p.name }}
+              </button>
+            </div>
+
+            <div class="history" v-if="historyList.length">
+              <label>歷史紀錄</label>
+              <button v-for="h in historyList" :key="h.id" class="hitem"
+                      :title="`${h.at}・${h.intersection_type || ''}`"
+                      @click="useHistory(h)">
+                <span class="hverdict" :class="h.verdict">
+                  {{ VERDICT_LABEL[h.verdict] || '—' }}
+                </span>
+                <span class="hname">{{ historyName(h) }}</span>
+                <small class="mono">{{ (h.at || '').slice(5, 16) }}</small>
               </button>
             </div>
 
@@ -273,6 +311,33 @@ label { display: block; font-size: 12.5px; color: var(--text-2); margin: 13px 0 
 
 .presets { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 13px; }
 .presets button { font-size: 12px; padding: 5px 11px; border-radius: 999px; }
+
+/* ── 歷史紀錄 ─────────────────────────────────── */
+.history {
+  margin-top: 14px; padding-top: 2px;
+  border-top: 1px solid var(--line-soft);
+  max-height: 220px; overflow-y: auto;
+}
+.hitem {
+  width: 100%;
+  display: flex; align-items: center; gap: 8px;
+  border: none; background: none; border-radius: 8px;
+  padding: 6px 8px; margin-bottom: 2px;
+  text-align: left; font-size: 12.5px;
+}
+.hitem:hover { background: var(--bg-sunken); }
+.hverdict {
+  flex: none; font-size: 11px; font-weight: 700;
+  border-radius: 999px; padding: 1px 8px;
+  background: var(--sev-mid-bg); color: var(--sev-mid-fg);
+}
+.hverdict.improved { background: var(--sev-high-bg); color: var(--sev-high-fg); }
+.hverdict.no_problem { background: var(--sev-low-bg); color: var(--sev-low-fg); }
+.hname {
+  flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: var(--text);
+}
+.hitem small { flex: none; color: var(--muted); font-size: 11px; }
 
 .status {
   list-style: none; padding: 12px 0 0; margin: 14px 0 0;

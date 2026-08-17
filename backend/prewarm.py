@@ -20,6 +20,10 @@ import sys
 import time
 from pathlib import Path
 
+# Windows 主控台預設 cp950，印「・」「✓」這類字元會直接 UnicodeEncodeError
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import pipeline
@@ -29,6 +33,9 @@ from services import cache
 DEMO_SPOTS = [
     ("台北 忠孝東路×敦化南路（主秀・正交路口）", 25.0417, 121.549, 140),
     ("台北 信義路五段（示範「非路口」中斷）", 25.033139, 121.564469, 120),
+    ("台北 公館圓環（多岔・圓環優先示範）", 25.0111, 121.5367, 180),
+    ("台中 台灣大道×文心路（正交大路口）", 24.163889, 120.646111, 160),
+    ("阿姆斯特丹（no_problem 對照組）", 52.350556, 4.868889, 140),
 ]
 
 
