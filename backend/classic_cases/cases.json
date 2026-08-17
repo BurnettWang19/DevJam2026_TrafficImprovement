@@ -1,0 +1,52 @@
+[
+  {
+    "id": "taipei-zhongxiao-jinshan",
+    "title": "忠孝東路二段與金山南路口改善",
+    "location": "臺北市",
+    "intersectionTypes": ["ORTHOGONAL"],
+    "problemTags": ["crosswalk", "sidewalk", "turning_conflict"],
+    "solutionTags": ["crosswalk_setback", "refuge_island", "corner_radius", "sidewalk_extension"],
+    "summary": "透過行穿線退縮、增設庇護島、縮小轉角半徑與拓寬停等空間改善行人安全。",
+    "sourceUrl": "https://www.motc.gov.tw/ch/app/data/view?id=14&module=news&serno=e670db95-a236-48ec-af1f-cc56ec803d9b"
+  },
+  {
+    "id": "new-taipei-yongning-yongan",
+    "title": "永寧路與永安街口改善",
+    "location": "新北市土城區",
+    "intersectionTypes": ["SKEWED", "MULTI_LEG"],
+    "problemTags": ["crosswalk", "turning_conflict", "large_intersection"],
+    "solutionTags": ["intersection_narrowing", "crosswalk_shortening", "channelization"],
+    "summary": "縮小非正交大型路口範圍、調整停止線與槽化線，降低車輛交織並縮短行人穿越距離。",
+    "sourceUrl": "https://www.ntpc.gov.tw/ch/home.jsp?dataserno=133d03a2071df2b4460d276362bf97cc&id=e8ca970cde5c00e1"
+  },
+  {
+    "id": "reno-wells-avenue",
+    "title": "Wells Avenue Road Diet",
+    "location": "Reno, Nevada",
+    "intersectionTypes": ["ORTHOGONAL"],
+    "problemTags": ["crosswalk", "sidewalk", "lane_marking", "speed"],
+    "solutionTags": ["road_diet", "refuge_island", "bike_lane", "sidewalk_extension"],
+    "summary": "四車道改為三車道配置並加入自行車道、中央轉向道、庇護島與較寬人行道。",
+    "sourceUrl": "https://highways.dot.gov/safety/other/road-diets/road-diet-case-studies/reno-nevada-wells-avenue"
+  },
+  {
+    "id": "new-york-ninth-avenue",
+    "title": "Ninth Avenue Complete Street",
+    "location": "New York City",
+    "intersectionTypes": ["ORTHOGONAL"],
+    "problemTags": ["crosswalk", "lane_marking", "bicycle_conflict"],
+    "solutionTags": ["protected_bike_lane", "refuge_island", "protected_turn_phase"],
+    "summary": "以停車保護型自行車道、自行車號誌、庇護島及保護左轉時相分離衝突。",
+    "sourceUrl": "https://highways.dot.gov/safety/other/road-diets/road-diet-case-studies/manhattan-new-york-ninth-avenue"
+  },
+  {
+    "id": "yunlin-beigang-counterexample",
+    "title": "北港庇護島配置修正案例",
+    "location": "雲林縣北港鎮",
+    "intersectionTypes": ["ORTHOGONAL", "SKEWED"],
+    "problemTags": ["traffic_island_visibility", "turning_path"],
+    "solutionTags": ["island_resizing", "visibility_enhancement"],
+    "summary": "庇護島設置後需依路幅、車輛轉向軌跡與夜間辨識度調整尺寸和警示設施。",
+    "sourceUrl": "https://public.yunlin.gov.tw/News_Content.aspx?n=759&s=500702"
+  }
+]

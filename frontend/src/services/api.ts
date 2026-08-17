@@ -18,7 +18,7 @@ export class ApiError extends Error {
 
 export const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000/api',
-  timeout: 30000
+  timeout: 300000
 })
 
 export function normalizeApiError(error: unknown): ApiError {
@@ -27,8 +27,12 @@ export function normalizeApiError(error: unknown): ApiError {
   }
 
   const axiosError = error as AxiosError<ApiErrorBody>
+  if (axiosError.code === 'ECONNABORTED') {
+    return new ApiError('ANALYSIS_TIMEOUT', '分析時間超過五分鐘，請縮小分析範圍後再試一次。')
+  }
+
   if (!axiosError.response) {
-    return new ApiError('NETWORK_ERROR', 'Unable to reach the backend API.')
+    return new ApiError('NETWORK_ERROR', '無法連線到後端服務，請確認後端正在執行。')
   }
 
   const body = axiosError.response.data

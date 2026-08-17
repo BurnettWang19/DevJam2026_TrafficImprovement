@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 560">
+  <defs><pattern id="grain" width="18" height="18" patternUnits="userSpaceOnUse"><circle cx="3" cy="4" r="1" fill="#aab49f" opacity=".22"/></pattern></defs>
+  <rect width="900" height="560" fill="#dfe8d8"/><path d="M0 74h300v122H0zM600 70h300v126H600zM0 365h300v195H0zM600 365h300v195H600z" fill="#cbd9c3"/>
+  <g fill="#bacdaf"><circle cx="70" cy="120" r="29"/><circle cx="135" cy="105" r="22"/><circle cx="740" cy="125" r="35"/><circle cx="815" cy="110" r="25"/><circle cx="100" cy="450" r="33"/><circle cx="790" cy="460" r="40"/></g>
+  <path d="M300 0h300v560H300zM0 196h900v169H0z" fill="#7d8380"/>
+  <path d="M435 0h14v560h-14zM0 273h900v14H0z" fill="#e0c86c"/>
+  <g stroke="#f5f2e8" stroke-width="7" stroke-dasharray="30 24"><path d="M365 0v560M535 0v560M0 233h900M0 328h900"/></g>
+  <g fill="#eeeae0" opacity=".9">
+    <path d="M260 217h24v126h-24zM616 217h24v126h-24z"/><path d="M321 157h258v22H321zM321 382h258v22H321z"/>
+  </g>
+  <g fill="#f8f6ed"><path d="M245 210h9v140h-9M646 210h9v140h-9"/><path d="M312 146h276v8H312zM312 410h276v8H312z"/></g>
+  <path d="M300 196Q300 256 240 280Q300 304 300 365M600 196Q600 256 660 280Q600 304 600 365" fill="none" stroke="#cb6951" stroke-width="7" stroke-dasharray="12 10" opacity=".85"/>
+  <rect width="900" height="560" fill="url(#grain)"/>
+  <g font-family="sans-serif"><rect x="32" y="28" width="210" height="48" rx="24" fill="#fffdf6" opacity=".94"/><circle cx="59" cy="52" r="9" fill="#c95c45"/><text x="80" y="59" font-size="19" font-weight="700" fill="#34483a">現況衝突示意</text></g>
+</svg>
