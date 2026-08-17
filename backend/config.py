@@ -32,6 +32,10 @@ load_dotenv(ROOT_DIR / ".env")
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "").strip()
+GOOGLE_MAP_TILES_API_KEY = (
+    os.getenv("GOOGLE_MAP_TILES_API_KEY", "").strip()
+    or os.getenv("VITE_GOOGLE_MAP_TILES_API_KEY", "").strip()
+)
 
 # 依序嘗試，前一個失敗就換下一個。
 # 注意：overpass-api.de 會用 406 擋掉沒有 User-Agent 的請求，見 services/osm.py。

@@ -13,16 +13,19 @@ import os
 import sys
 import traceback
 from pathlib import Path
+from urllib.parse import quote
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 import pipeline
-from config import (GEMINI_API_KEY, GOOGLE_MAPS_API_KEY, MAX_SIZE_M, MIN_SIZE_M,
+from config import (GEMINI_API_KEY, GOOGLE_MAPS_API_KEY,
+                    GOOGLE_MAP_TILES_API_KEY, MAX_SIZE_M, MIN_SIZE_M,
                     ROOT_DIR, load_models, load_prompt)
 from services import cache, cases, imagery, memory, osm
 
@@ -52,6 +55,7 @@ def health() -> dict:
         "ok": True,
         "gemini_api_key": bool(GEMINI_API_KEY),
         "google_maps_api_key": bool(GOOGLE_MAPS_API_KEY),
+        "google_map_tiles_api_key": bool(GOOGLE_MAP_TILES_API_KEY),
         "imagery_provider": provider,
         "imagery_ready": provider == "esri" or bool(GOOGLE_MAPS_API_KEY),
         "scorer_prompt_filled": bool(scorer),
@@ -101,6 +105,21 @@ async def buildings(south: float, west: float, north: float, east: float) -> dic
         except OSError:
             pass
     return data
+
+
+@app.get("/api/map-tiles/config")
+def map_tiles_config() -> JSONResponse:
+    """回傳瀏覽器載入 Google 3D Tiles 所需、且禁止快取的 URL。"""
+    if not GOOGLE_MAP_TILES_API_KEY:
+        raise HTTPException(
+            503,
+            "尚未設定 GOOGLE_MAP_TILES_API_KEY，無法載入 Google Photorealistic 3D Tiles。",
+        )
+    key = quote(GOOGLE_MAP_TILES_API_KEY, safe="")
+    return JSONResponse(
+        {"tileset_url": f"https://tile.googleapis.com/v1/3dtiles/root.json?key={key}"},
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 @app.get("/api/session/{session_id}")

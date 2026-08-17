@@ -33,7 +33,7 @@
 - Produces: `GET /api/map-tiles/config -> {"tileset_url": str}` with `Cache-Control: no-store`.
 - Produces: `google_map_tiles_api_key: bool` in `/api/health`.
 
-- [ ] **Step 1: Document the runtime credential**
+- [x] **Step 1: Document the runtime credential**
 
 Add the following empty entry to `.env.example` without copying the user's real value:
 
@@ -41,7 +41,7 @@ Add the following empty entry to `.env.example` without copying the user's real 
 GOOGLE_MAP_TILES_API_KEY=
 ```
 
-- [ ] **Step 2: Load the canonical variable with local compatibility**
+- [x] **Step 2: Load the canonical variable with local compatibility**
 
 Add this next to the existing Google Maps key in `backend/config.py`:
 
@@ -52,7 +52,7 @@ GOOGLE_MAP_TILES_API_KEY = (
 )
 ```
 
-- [ ] **Step 3: Expose a no-store client configuration endpoint**
+- [x] **Step 3: Expose a no-store client configuration endpoint**
 
 Import `quote` and `JSONResponse`, import the new config constant, and add this endpoint before the frontend static mount in `backend/main.py`:
 
@@ -81,7 +81,7 @@ Add the readiness flag to the health payload:
 "google_map_tiles_api_key": bool(GOOGLE_MAP_TILES_API_KEY),
 ```
 
-- [ ] **Step 4: Perform static endpoint review**
+- [x] **Step 4: Perform static endpoint review**
 
 Confirm that the route is declared before `app.mount("/", ...)`, that the response never contains Gemini credentials, and that only the URL the browser already needs is returned.
 
