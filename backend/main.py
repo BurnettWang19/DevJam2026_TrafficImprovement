@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import sys
@@ -27,7 +28,7 @@ import pipeline
 from config import (GEMINI_API_KEY, GOOGLE_MAPS_API_KEY,
                     GOOGLE_MAP_TILES_API_KEY, MAX_SIZE_M, MIN_SIZE_M,
                     ROOT_DIR, load_models, load_prompt)
-from services import cache, cases, imagery, memory, osm
+from services import cache, cases, history, imagery, memory, osm
 
 app = FastAPI(title="路口設計品質分析 API", version="0.1.0")
 
@@ -146,12 +147,25 @@ async def analyze(req: AnalyzeRequest) -> dict:
             "請填入金鑰，或把 options.imagery_provider 改成 esri（免金鑰）。",
         )
     try:
-        return await pipeline.analyze(req.lat, req.lng, req.size_m, force=req.force)
+        result = await pipeline.analyze(req.lat, req.lng, req.size_m, force=req.force)
     except HTTPException:
         raise
     except Exception as exc:
         traceback.print_exc()
         raise HTTPException(500, f"分析失敗：{exc}") from exc
+
+    # 歷史紀錄：背景寫入 GCS，不佔回應時間；失敗也不影響結果
+    asyncio.get_running_loop().run_in_executor(None, history.record_sync, result)
+    return result
+
+
+@app.get("/api/history")
+async def history_list(limit: int = 30) -> dict:
+    """最近的分析紀錄（存於 GCS）。未設定 bucket 時回 enabled: false。"""
+    records = await asyncio.to_thread(history.list_sync, max(1, min(limit, 100)))
+    if records is None:
+        return {"enabled": False, "records": []}
+    return {"enabled": True, "records": records}
 
 
 # ---------------------------------------------------------------------------

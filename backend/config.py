@@ -37,6 +37,15 @@ GOOGLE_MAP_TILES_API_KEY = (
     or os.getenv("VITE_GOOGLE_MAP_TILES_API_KEY", "").strip()
 )
 
+# 分析歷史紀錄要存放的 GCS bucket 名稱。留空 = 停用歷史功能。
+# 本機開發需要 ADC 憑證（gcloud auth application-default login），
+# Cloud Run 上則用執行服務帳戶，只要對 bucket 有物件讀寫權限即可。
+GCS_HISTORY_BUCKET = os.getenv("GCS_HISTORY_BUCKET", "").strip()
+
+# GCP 專案 ID。Cloud Run 上可留空（metadata server 會提供）；
+# 本機的 ADC 不一定帶專案，storage.Client() 會需要它。
+GCS_PROJECT = os.getenv("GCS_PROJECT", "").strip() or None
+
 # 依序嘗試，前一個失敗就換下一個。
 # 注意：overpass-api.de 會用 406 擋掉沒有 User-Agent 的請求，見 services/osm.py。
 # 只放「全球」實例。不要加 overpass.osm.ch —— 它只有瑞士的資料，

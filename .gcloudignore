@@ -25,5 +25,7 @@ frontend/.vite/
 # 文件
 *.md
 !example/README.md
+# prompts 是程式的一部分，絕對不能被 *.md 排除掉 —— 少了它整條 pipeline 直接 500
+!backend/prompts/*.md
 
 # 注意：這裡「刻意不排除」backend/.cache/

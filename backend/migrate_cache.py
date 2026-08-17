@@ -38,6 +38,8 @@ def main() -> None:
     latest: dict[str, Path] = {}
     for path in src:
         stem = path.stem
+        if stem.startswith(("bldg_", "history_")):
+            continue                          # 非分析快取（無指紋），不搬
         key = stem.rsplit("_", 1)[0]          # 去掉指紋，剩 lat_lng_size
         if key not in latest or path.stat().st_mtime > latest[key].stat().st_mtime:
             latest[key] = path

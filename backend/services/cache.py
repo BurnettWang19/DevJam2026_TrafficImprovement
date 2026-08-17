@@ -81,11 +81,12 @@ def entries() -> list[dict]:
         parts = stem.rsplit("_", 2)
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
-            continue
+            lat, lng = float(parts[0]), float(parts[1])
+        except (OSError, json.JSONDecodeError, ValueError, IndexError):
+            continue          # 非分析快取的檔名（例如 bldg_*）直接略過
         out.append({
-            "lat": float(parts[0]),
-            "lng": float(parts[1]),
+            "lat": lat,
+            "lng": lng,
             "size_m": int(parts[2].rstrip("m")),
             "verdict": data.get("verdict"),
             "cached_at": data.get("cached_at"),
@@ -121,6 +122,10 @@ def prune() -> tuple[int, float]:
     n, freed = 0, 0
     for path in CACHE_DIR.glob("*.json"):
         if path.name.endswith(keep):
+            continue
+        if path.name.startswith("bldg_"):
+            continue          # 建築物快取與指紋無關，不能跟著清
+        if path.name.startswith("history_"):
             continue
         try:
             freed += path.stat().st_size
