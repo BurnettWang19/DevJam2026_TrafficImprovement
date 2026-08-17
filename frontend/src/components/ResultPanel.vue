@@ -2,7 +2,7 @@
 import { computed, defineAsyncComponent, ref } from 'vue'
 import TraceTimeline from './TraceTimeline.vue'
 import DesignExplorer from './DesignExplorer.vue'
-// three.js 很大，切成獨立 chunk，點「3D 檢視」才載入
+// CesiumJS 很大，切成獨立 chunk，點「3D 檢視」才載入
 const Design3D = defineAsyncComponent(() => import('./Design3D.vue'))
 import CountUp from './CountUp.vue'
 
