@@ -23,7 +23,7 @@ from pydantic import BaseModel, Field
 import pipeline
 from config import (GEMINI_API_KEY, GOOGLE_MAPS_API_KEY, MAX_SIZE_M, MIN_SIZE_M,
                     ROOT_DIR, load_models, load_prompt)
-from services import cache, cases, imagery, memory
+from services import cache, cases, cloud_history, imagery, memory
 
 app = FastAPI(title="路口設計品質分析 API", version="0.1.0")
 
@@ -59,6 +59,7 @@ def health() -> dict:
         "classic_cases": len(cases.load_index()),
         "cache_entries": len(cache.entries()),
         "cache_fingerprint": cache.fingerprint(),
+        "history_storage": cloud_history.status(),
     }
 
 
@@ -66,6 +67,41 @@ def health() -> dict:
 def list_cache() -> dict:
     """目前 prompt / 模型設定下可用的快取。改了 prompt 舊快取就不算數。"""
     return {"fingerprint": cache.fingerprint(), "entries": cache.entries()}
+
+
+@app.get("/api/history")
+def analysis_history() -> dict:
+    try:
+        entries = (cloud_history.entries() if cloud_history.enabled()
+                   else cache.history_entries())
+    except Exception as exc:
+        raise HTTPException(503, f"無法讀取雲端歷史紀錄：{exc}") from exc
+    return {"entries": entries, "total": len(entries)}
+
+
+@app.get("/api/history/{record_id}")
+def analysis_history_detail(record_id: str) -> dict:
+    try:
+        data = (cloud_history.get(record_id) if cloud_history.enabled()
+                else cache.history_get(record_id))
+    except Exception as exc:
+        raise HTTPException(503, f"無法讀取雲端歷史紀錄：{exc}") from exc
+    if data is None:
+        raise HTTPException(404, "找不到這筆分析紀錄")
+    data["cached"] = True
+    return data
+
+
+@app.delete("/api/history/{record_id}")
+def delete_analysis_history(record_id: str) -> dict:
+    try:
+        deleted = (cloud_history.delete(record_id) if cloud_history.enabled()
+                   else cache.history_delete(record_id))
+    except Exception as exc:
+        raise HTTPException(503, f"無法刪除雲端歷史紀錄：{exc}") from exc
+    if not deleted:
+        raise HTTPException(404, "找不到這筆分析紀錄")
+    return {"deleted": True, "id": record_id}
 
 
 @app.delete("/api/cache")

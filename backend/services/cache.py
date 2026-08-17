@@ -94,6 +94,84 @@ def entries() -> list[dict]:
     return out
 
 
+def _history_summary(path: Path, data: dict) -> dict:
+    """將完整分析結果壓成歷史列表需要的輕量摘要。"""
+    inp = data.get("input") or {}
+    score = data.get("score") or {}
+    severity = score.get("severity_counts") or {}
+    if not severity:
+        severity = {}
+        for finding in (data.get("findings") or {}).values():
+            for issue in finding.get("issues") or []:
+                key = str(issue.get("severity") or "uncertain").lower()
+                severity[key] = severity.get(key, 0) + 1
+
+    roads = ((data.get("vector_summary") or {}).get("osm") or {}).get("road_names") or []
+    location = " × ".join(roads[:2]) if roads else (
+        f"{float(inp.get('lat', 0)):.5f}, {float(inp.get('lng', 0)):.5f}"
+    )
+    numeric_score = score.get("score")
+    if not isinstance(numeric_score, (int, float)):
+        numeric_score = None
+
+    return {
+        "id": path.name,
+        "location": location,
+        "lat": inp.get("lat"),
+        "lng": inp.get("lng"),
+        "size_m": inp.get("size_m"),
+        "analyzed_at": data.get("cached_at"),
+        "verdict": data.get("verdict"),
+        "score": numeric_score,
+        "severity": {
+            "critical": int(severity.get("CRITICAL", severity.get("critical", 0))),
+            "high": int(severity.get("HIGH", severity.get("high", 0))),
+            "medium": int(severity.get("MEDIUM", severity.get("medium", 0))),
+            "low": int(severity.get("LOW", severity.get("low", 0))),
+        },
+        "osm_available": (data.get("vector_summary") or {}).get("osm_available", True),
+    }
+
+
+def history_entries() -> list[dict]:
+    """列出所有版本的分析紀錄；程式更新後舊結果仍保留在歷史頁。"""
+    if not CACHE_DIR.is_dir():
+        return []
+    out = []
+    for path in CACHE_DIR.glob("*.json"):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+            out.append(_history_summary(path, data))
+        except (OSError, ValueError, TypeError, json.JSONDecodeError):
+            continue
+    return sorted(out, key=lambda item: item.get("analyzed_at") or "", reverse=True)
+
+
+def history_get(record_id: str) -> dict | None:
+    if Path(record_id).name != record_id or not record_id.endswith(".json"):
+        return None
+    path = CACHE_DIR / record_id
+    if not path.is_file():
+        return None
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def history_delete(record_id: str) -> bool:
+    if Path(record_id).name != record_id or not record_id.endswith(".json"):
+        return False
+    path = CACHE_DIR / record_id
+    if not path.is_file():
+        return False
+    try:
+        path.unlink()
+        return True
+    except OSError:
+        return False
+
+
 def clear() -> int:
     """清掉所有快取（含舊指紋的），回傳刪除數量。"""
     if not CACHE_DIR.is_dir():

@@ -46,6 +46,27 @@ GOOGLE_MAPS_API_KEY=...     ← 選填
 要用 Google 的話：Google Cloud Console → APIs & Services → Library → 搜尋
 "Maps Static API" → **Enable** → Credentials → Create API key。專案必須綁定帳單帳戶。
 
+### Firestore + GCS 歷史紀錄（選填）
+
+啟用 Cloud Firestore 與 Cloud Storage，建立一個 bucket，並在 `.env` 加上：
+
+```dotenv
+GCP_PROJECT_ID=your-project-id
+GCS_BUCKET=your-bucket-name
+HISTORY_COLLECTION=analysis_history
+HISTORY_STORAGE_PREFIX=analyses
+```
+
+本機使用 Application Default Credentials：
+
+```powershell
+gcloud auth application-default login
+```
+
+執行身分需要 Firestore 文件讀寫權限，以及該 bucket 的物件讀寫、刪除權限。
+設定完成後，Firestore 保存歷史列表索引，GCS 保存完整分析 JSON 與所有圖片；
+若未設定 `GCP_PROJECT_ID` 或 `GCS_BUCKET`，系統會繼續使用原本的本地 `.cache` 歷史紀錄。
+
 ### 2. 貼上評分標準
 
 打開 **`backend/prompts/00_scorer_system_prompt.md`**（目前是空白檔案），把你的評分依據與方法貼進去。

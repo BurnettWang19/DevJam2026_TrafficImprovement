@@ -1,9 +1,11 @@
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
+import HistoryView from './components/HistoryView.vue'
 import MapPicker from './components/MapPicker.vue'
 import TraceTimeline from './components/TraceTimeline.vue'
 import ResultPanel from './components/ResultPanel.vue'
 
+const page = ref(window.location.hash === '#history' ? 'history' : 'analysis')
 const form = reactive({ lat: 25.0417, lng: 121.549, sizeM: 140 })
 const latText = ref(String(form.lat))
 const lngText = ref(String(form.lng))
@@ -50,6 +52,16 @@ function usePreset(p) {
   mapRef.value?.flyTo(p.lat, p.lng)
 }
 
+function navigate(target) {
+  page.value = target
+  window.location.hash = target === 'history' ? 'history' : ''
+}
+
+function openHistoryResult(saved) {
+  result.value = saved
+  navigate('analysis')
+}
+
 async function analyze(force = false) {
   loading.value = true
   forcing.value = force
@@ -75,12 +87,15 @@ async function analyze(force = false) {
 </script>
 
 <template>
-  <div class="app">
+  <HistoryView v-if="page === 'history'" @open-result="openHistoryResult" />
+
+  <div v-else class="app">
     <aside>
       <header>
         <p class="eyebrow">Road Design Review</p>
         <h1>路口設計品質分析</h1>
         <p class="lede">OSM 向量與影像辨識彙整，經多重代理人評估後重繪改善設計。</p>
+        <button class="history-link" @click="navigate('history')">查看分析歷史</button>
       </header>
 
       <div class="card">
@@ -177,6 +192,7 @@ aside header h1 {
   color: var(--green-900); letter-spacing: -.01em;
 }
 .lede { margin: 0; font-size: 13px; color: var(--text-2); }
+.history-link { margin-top: 12px; font-size: 12.5px; }
 
 main { padding: 32px 36px 64px; overflow-y: auto; }
 

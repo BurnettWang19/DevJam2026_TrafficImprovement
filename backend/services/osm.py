@@ -15,7 +15,8 @@ import asyncio
 
 import httpx
 
-from config import OVERPASS_ENDPOINTS, OVERPASS_ROUNDS, USER_AGENT
+from config import (OVERPASS_ENDPOINTS, OVERPASS_ROUNDS, OVERPASS_TIMEOUT_S,
+                    USER_AGENT)
 
 # 刻意壓到 5 個 clause：way["footway"] 與 way["crossing"] 都是
 # highway=footway 的子標籤，已被 way["highway"] 涵蓋，多寫只會拖慢查詢。
@@ -72,7 +73,7 @@ async def fetch_osm(bbox: tuple[float, float, float, float]) -> dict:
     headers = {"User-Agent": USER_AGENT}
 
     # 公共節點的 504／timeout 多半是瞬間負載，整輪跑完再重試一次比原地重試有效
-    async with httpx.AsyncClient(timeout=45.0, headers=headers) as client:
+    async with httpx.AsyncClient(timeout=OVERPASS_TIMEOUT_S, headers=headers) as client:
         for attempt in range(OVERPASS_ROUNDS):
             for url in OVERPASS_ENDPOINTS:
                 try:
@@ -99,9 +100,17 @@ async def fetch_osm(bbox: tuple[float, float, float, float]) -> dict:
     if data is None:
         if saw_valid_empty:
             # 所有節點一致回空 —— 這個範圍在 OSM 上真的沒有道路資料
-            return {"type": "FeatureCollection", "features": []}
-        raise RuntimeError("所有 Overpass 節點都失敗了（公共節點會依 IP 限流，"
-                           "短時間大量查詢後稍等一下通常就會恢復）：\n" + "\n".join(errors))
+            return {"type": "FeatureCollection", "features": [],
+                    "osm_available": True}
+        # Overpass 是免費公共服務，不應成為整個分析流程的單點故障。
+        # 保留錯誤摘要供 trace 顯示，後續改用衛星影像與 Gemini 降級分析。
+        return {
+            "type": "FeatureCollection",
+            "features": [],
+            "osm_available": False,
+            "warning": "所有 Overpass 節點均無法連線，本次僅依衛星影像分析。",
+            "errors": errors,
+        }
 
     features = []
     for el in data.get("elements", []):
@@ -137,7 +146,8 @@ async def fetch_osm(bbox: tuple[float, float, float, float]) -> dict:
             },
         })
 
-    return {"type": "FeatureCollection", "features": features}
+    return {"type": "FeatureCollection", "features": features,
+            "osm_available": True}
 
 
 def summarize(fc: dict) -> dict:

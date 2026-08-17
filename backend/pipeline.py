@@ -24,7 +24,7 @@ import time
 import uuid
 
 from config import MAX_SIZE_M, MIN_SIZE_M, cases_dir, load_prompt, option
-from services import cache, cases, memory, osm, render, vision
+from services import cache, cases, cloud_history, memory, osm, render, vision
 from services.gemini import call_image, call_json
 from services.geo import ImageFrame, bbox_from_center
 from services.imagery import attribution, fetch_satellite, to_data_url
@@ -158,6 +158,7 @@ async def analyze(lat: float, lng: float, size_m: float,
     result = await _analyze(lat, lng, size_m)
     result["cached"] = False
     cache.put(lat, lng, size_m, result)
+    result["history_saved"] = await asyncio.to_thread(cloud_history.save_safely, result)
     return result
 
 
@@ -180,11 +181,16 @@ async def _analyze(lat: float, lng: float, size_m: float) -> dict:
     osm_fc, (base_png, frame, provider) = await asyncio.gather(osm_task, img_task)
 
     osm_summary = osm.summarize(osm_fc)
-    trace.add("擷取資料", "done",
-              f"OSM 取得 {len(osm_fc['features'])} 筆向量；"
-              f"{provider} 衛星影像 {frame.width}x{frame.height}px"
-              f"（zoom {frame.zoom}，{frame.meters_per_pixel:.2f} m/px）",
-              counts=osm_summary["counts"])
+    osm_available = osm_fc.get("osm_available", True)
+    trace.add(
+        "擷取資料",
+        "done" if osm_available else "warning",
+        (f"OSM 取得 {len(osm_fc['features'])} 筆向量；"
+         if osm_available else f"{osm_fc['warning']} ")
+        + f"{provider} 衛星影像 {frame.width}x{frame.height}px"
+          f"（zoom {frame.zoom}，{frame.meters_per_pixel:.2f} m/px）",
+        counts=osm_summary["counts"],
+    )
 
     result["satellite_image"] = to_data_url(base_png)
     result["imagery"] = {"provider": provider, "attribution": attribution(provider),
@@ -204,6 +210,7 @@ async def _analyze(lat: float, lng: float, size_m: float) -> dict:
     result["vectors"] = merged
     result["vector_summary"] = {
         "osm": osm_summary,
+        "osm_available": osm_available,
         "vision_added": len(vision_fc["features"]),
         "total": len(merged["features"]),
     }

@@ -32,6 +32,10 @@ load_dotenv(ROOT_DIR / ".env")
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY", "").strip()
+GCP_PROJECT_ID = os.getenv("GCP_PROJECT_ID", os.getenv("GOOGLE_CLOUD_PROJECT", "")).strip()
+GCS_BUCKET = os.getenv("GCS_BUCKET", "").strip()
+HISTORY_COLLECTION = os.getenv("HISTORY_COLLECTION", "analysis_history").strip()
+HISTORY_STORAGE_PREFIX = os.getenv("HISTORY_STORAGE_PREFIX", "analyses").strip().strip("/")
 
 # 依序嘗試，前一個失敗就換下一個。
 # 注意：overpass-api.de 會用 406 擋掉沒有 User-Agent 的請求，見 services/osm.py。
@@ -43,8 +47,10 @@ OVERPASS_ENDPOINTS = [
     "https://overpass.private.coffee/api/interpreter",
 ]
 
-# 整份清單跑完算一輪；全掛就間隔重試，公共節點的 504 幾乎都是瞬間負載
-OVERPASS_ROUNDS = 2
+# Demo 不應因公共節點故障等待數分鐘；整份清單只嘗試一輪，
+# 全部失敗時由 services/osm.py 回傳降級結果，讓衛星影像分析繼續。
+OVERPASS_ROUNDS = 1
+OVERPASS_TIMEOUT_S = 12.0
 
 USER_AGENT = "IntersectionAudit/0.1 (hackathon MVP; OSM Overpass client)"
 
