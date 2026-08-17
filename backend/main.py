@@ -8,6 +8,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 import traceback
@@ -23,7 +24,7 @@ from pydantic import BaseModel, Field
 import pipeline
 from config import (GEMINI_API_KEY, GOOGLE_MAPS_API_KEY, MAX_SIZE_M, MIN_SIZE_M,
                     ROOT_DIR, load_models, load_prompt)
-from services import cache, cases, imagery, memory
+from services import cache, cases, imagery, memory, osm
 
 app = FastAPI(title="路口設計品質分析 API", version="0.1.0")
 
@@ -76,6 +77,30 @@ def clear_cache() -> dict:
 @app.get("/api/cases")
 def list_cases() -> dict:
     return {"cases": cases.load_index()}
+
+
+@app.get("/api/buildings")
+async def buildings(south: float, west: float, north: float, east: float) -> dict:
+    """bbox 內的建築物輪廓，給前端 3D 檢視器擠出立體建築。
+
+    有磁碟快取（不含指紋 —— 建築物與 prompt / 模型設定無關），
+    Overpass 失敗時回空清單，前端會靜默降級。
+    """
+    key = f"bldg_{south:.6f}_{west:.6f}_{north:.6f}_{east:.6f}"
+    path = cache.CACHE_DIR / f"{key}.json"
+    if path.exists():
+        try:
+            return json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            pass
+    data = await osm.fetch_buildings((south, west, north, east))
+    if data.get("buildings"):        # 空結果不寫檔，下次還有機會抓到
+        try:
+            cache.CACHE_DIR.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        except OSError:
+            pass
+    return data
 
 
 @app.get("/api/session/{session_id}")

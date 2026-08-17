@@ -1,6 +1,10 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, defineAsyncComponent, ref } from 'vue'
+import TraceTimeline from './TraceTimeline.vue'
 import DesignExplorer from './DesignExplorer.vue'
+// three.js 很大，切成獨立 chunk，點「3D 檢視」才載入
+const Design3D = defineAsyncComponent(() => import('./Design3D.vue'))
+import CountUp from './CountUp.vue'
 
 const props = defineProps({ result: { type: Object, required: true } })
 const emit = defineEmits(['back'])
@@ -50,6 +54,9 @@ const cases = computed(() => r.value.classic_cases
   || (r.value.classic_case ? [r.value.classic_case] : []))
 
 const annotations = computed(() => r.value.design?.annotations || [])
+const view = ref('2d')        // 改善後設計：2D 互動 / 3D 檢視
+const can3d = computed(() =>
+  !!(r.value.design?.geojson?.features?.length && r.value.satellite_image && r.value.bbox))
 
 /* 報告改成條列。舊格式（長段落）仍相容，切成句子當作條列。 */
 const toPoints = (list, fallback) => {
@@ -150,11 +157,16 @@ const coords = computed(() => {
             <p class="eyebrow">Proposed Design</p>
             <h2>改善後的設計</h2>
           </div>
-          <p class="markednote" v-if="annotations.length">
-            互動圖 · 點編號放大檢視
-          </p>
+          <div class="toggle" v-if="can3d">
+            <button :class="{ on: view === '2d' }" @click="view = '2d'">2D 互動</button>
+            <button :class="{ on: view === '3d' }" @click="view = '3d'">3D 檢視</button>
+          </div>
         </div>
-        <DesignExplorer v-if="annotations.length"
+        <Design3D v-if="view === '3d' && can3d"
+                  :image="r.satellite_image"
+                  :geojson="r.design.geojson"
+                  :bbox="r.bbox" />
+        <DesignExplorer v-else-if="annotations.length"
                         :image="r.design_image"
                         :annotations="annotations"
                         :key-changes="r.design?.key_changes || []"
@@ -207,7 +219,8 @@ const coords = computed(() => {
           </div>
           <div class="total">
             <span>標線工程合計</span>
-            <b>{{ money(cost.total.low) }} ~ {{ money(cost.total.high) }}</b>
+            <b><CountUp :value="cost.total.low" prefix="$" /> ~
+               <CountUp :value="cost.total.high" prefix="$" /></b>
             <small>標線總面積 {{ cost.total_area_m2 }} ㎡</small>
           </div>
         </div>
@@ -292,6 +305,15 @@ const coords = computed(() => {
       </section>
     </template>
 
+    <!-- ── 分析流程軌跡（原左側欄的時間軸） ──────────────── -->
+    <details class="pipeline card" v-if="r.trace?.length">
+      <summary>
+        <span class="eyebrow" style="margin:0">Pipeline</span>
+        分析流程軌跡 · {{ r.trace.length }} 步
+      </summary>
+      <TraceTimeline :trace="r.trace" />
+    </details>
+
     <!-- ── 重選地點 ──────────────────────────────────────── -->
     <footer class="foot" v-reveal>
       <button class="backbtn" @click="emit('back')">← 重新選擇路口</button>
@@ -310,6 +332,14 @@ const coords = computed(() => {
   gap: 20px;
   padding-top: 8px;
 }
+.pipeline { padding: 16px 22px; }
+.pipeline summary {
+  cursor: pointer; font-size: 14px; font-weight: 600; color: var(--text-2);
+  display: flex; align-items: center; gap: 12px;
+}
+.pipeline summary:hover { color: var(--green-800); }
+.pipeline[open] summary { margin-bottom: 14px; }
+
 .foot { display: flex; justify-content: center; padding: 10px 0 20px; }
 .backbtn {
   padding: 13px 40px; border-radius: 999px;
@@ -383,11 +413,19 @@ const coords = computed(() => {
   gap: 20px; margin-bottom: 20px;
 }
 .markedhead h2 { margin: 0; font-size: 25px; font-weight: 800; color: var(--green-900); }
-.markednote {
-  margin: 0; flex: none;
-  font-size: 12.5px; color: var(--green-700); font-weight: 600;
-  background: var(--sage); border-radius: 999px; padding: 5px 15px;
+.toggle {
+  display: flex; gap: 4px; padding: 4px;
+  background: var(--bg-sunken); border-radius: 999px; flex: none;
 }
+.toggle button {
+  border: none; background: none; border-radius: 999px;
+  padding: 6px 16px; font-size: 13px; color: var(--text-2);
+}
+.toggle button:hover { background: rgba(255, 255, 255, .6); }
+.toggle button.on {
+  background: var(--green-900); color: var(--bg); font-weight: 600;
+}
+.toggle button.on:hover { background: var(--green-800); }
 .markedimg {
   width: 100%; display: block;
   border-radius: 14px; border: 1px solid var(--line-soft);

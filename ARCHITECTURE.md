@@ -46,7 +46,7 @@ DavJam_Project/
 │   │   ├── render.py     (256)   GeoJSON → PNG、圖例、改動標記佈局
 │   │   ├── cases.py       (86)   經典案例比對與排序
 │   │   ├── memory.py      (33)   子代理人問題的記憶體暫存
-│   │   └── cache.py       (85)   結果磁碟快取（含內容指紋）
+│   │   └── cache.py       (85)   結果磁碟快取（含內*容指紋）
 │   │
 │   ├── .venv/                    虛擬環境（gitignored）
 │   └── .cache/                   分析結果快取（gitignored，單筆 3~7 MB）

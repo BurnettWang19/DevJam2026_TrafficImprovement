@@ -145,6 +145,56 @@ async def fetch_osm(bbox: tuple[float, float, float, float]) -> dict:
     return {"type": "FeatureCollection", "features": features}
 
 
+def _building_height(tags: dict) -> float:
+    """估算建築高度（公尺）：height 標籤 > 樓層數 × 3.2 > 預設 9。"""
+    for key in ("height", "building:height"):
+        raw = tags.get(key)
+        if raw:
+            try:
+                return max(3.0, float(str(raw).lower().replace("m", "").strip()))
+            except ValueError:
+                pass
+    levels = tags.get("building:levels")
+    if levels:
+        try:
+            return max(3.0, float(levels) * 3.2)
+        except ValueError:
+            pass
+    return 9.0
+
+
+async def fetch_buildings(bbox: tuple[float, float, float, float]) -> dict:
+    """抓 bbox 內的建築物輪廓（給前端 3D 檢視器擠出用）。
+
+    與主流程無關：失敗就回空清單，不會中斷任何東西。
+    """
+    s, w, n, e = bbox
+    query = (f'[out:json][timeout:25];way["building"]({s},{w},{n},{e});out geom;')
+    headers = {"User-Agent": USER_AGENT}
+
+    async with httpx.AsyncClient(timeout=30.0, headers=headers) as client:
+        for url in OVERPASS_ENDPOINTS:
+            try:
+                r = await client.post(url, data={"data": query})
+                if r.status_code != 200:
+                    continue
+                elements = r.json().get("elements", [])
+                buildings = []
+                for el in elements:
+                    geom = el.get("geometry") or []
+                    if el.get("type") != "way" or len(geom) < 4:
+                        continue
+                    ring = [[p["lon"], p["lat"]] for p in geom]
+                    buildings.append({
+                        "ring": ring,
+                        "height_m": round(_building_height(el.get("tags") or {}), 1),
+                    })
+                return {"buildings": buildings[:400]}
+            except Exception:
+                continue
+    return {"buildings": []}
+
+
 def summarize(fc: dict) -> dict:
     """給 LLM 看的簡短統計（避免整包 GeoJSON 灌進 prompt）。"""
     counts: dict[str, int] = {}
