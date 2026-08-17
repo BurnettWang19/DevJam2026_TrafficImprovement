@@ -210,6 +210,9 @@ def estimate(design_geojson: dict) -> dict:
 
     low = sum(i["low"] for i in items) + sum(f["low"] for f in fixed)
     high = sum(i["high"] for i in items) + sum(f["high"] for f in fixed)
+    low = _money(low)
+    high = _money(high)
+    average = _money((low + high) / 2)
 
     return {
         "currency": CURRENCY,
@@ -217,7 +220,7 @@ def estimate(design_geojson: dict) -> dict:
         "fixed": fixed,
         "uncovered": sorted(uncovered, key=lambda x: -x["length_m"]),
         "total_area_m2": round(total_area, 1),
-        "total": {"low": _money(low), "high": _money(high)},
+        "total": {"low": low, "high": high, "average": average},
         "assumptions": [
             f"標線長度由重繪後的向量資料實際量測（haversine），非概估。",
             f"熱拌塑膠標線 ${MARKING_RATE}/㎡，玻璃珠與防滑骨材（BPN 50）已內含。",

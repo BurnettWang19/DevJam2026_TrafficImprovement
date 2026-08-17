@@ -72,7 +72,16 @@ const improvePoints = computed(() =>
   toPoints(r.value.report?.improvement_points, r.value.report?.improvement_narrative))
 
 const cost = computed(() => r.value.cost)
-const money = (n) => '$' + Number(n || 0).toLocaleString('en-US')
+const currencyPrefix = computed(() => cost.value?.currency === 'TWD' ? 'NT$ ' : '$')
+const averageCost = computed(() => {
+  const supplied = Number(cost.value?.total?.average)
+  if (Number.isFinite(supplied) && supplied >= 0) return supplied
+  const low = Number(cost.value?.total?.low)
+  const high = Number(cost.value?.total?.high)
+  if (!Number.isFinite(low) || !Number.isFinite(high)) return 0
+  return Math.ceil(((low + high) / 2) / 100) * 100
+})
+const money = (n) => currencyPrefix.value + Number(n || 0).toLocaleString('en-US')
 
 const coords = computed(() => {
   const i = r.value.input || {}
@@ -212,15 +221,21 @@ const coords = computed(() => {
       <!-- ── 工程費用估算 ──────────────────────────────── -->
       <section class="cost" v-if="cost && cost.items?.length" v-reveal>
         <div class="costhead">
-          <div>
+          <div class="costtitle">
             <p class="eyebrow">Cost Estimate</p>
             <h2>工程費用估算</h2>
           </div>
-          <div class="total">
-            <span>標線工程合計</span>
-            <b><CountUp :value="cost.total.low" prefix="$" /> ~
-               <CountUp :value="cost.total.high" prefix="$" /></b>
-            <small>標線總面積 {{ cost.total_area_m2 }} ㎡</small>
+          <div class="costsummary">
+            <div class="averageprice">
+              <span>平均工程費</span>
+              <b><CountUp :value="averageCost" :prefix="currencyPrefix" /></b>
+              <small>依估算上下限取平均，進位至百元</small>
+            </div>
+            <div class="total">
+              <span>合理估算區間</span>
+              <b>{{ money(cost.total.low) }}–{{ money(cost.total.high) }}</b>
+              <small>標線總面積 {{ cost.total_area_m2 }} ㎡</small>
+            </div>
           </div>
         </div>
 
@@ -485,17 +500,34 @@ const coords = computed(() => {
   border-radius: 18px; padding: 30px 34px 26px;
 }
 .costhead {
-  display: flex; justify-content: space-between; align-items: flex-end;
+  display: grid; grid-template-columns: minmax(170px, .6fr) minmax(440px, 1.4fr);
+  align-items: end;
   gap: 24px; margin-bottom: 22px;
 }
 .costhead h2 { margin: 0; font-size: 25px; font-weight: 800; color: var(--green-900); }
-.total { text-align: right; flex: none; }
+.costsummary {
+  display: grid; grid-template-columns: minmax(250px, 1fr) auto;
+  align-items: end; gap: 28px; padding-left: 24px;
+  border-left: 3px solid var(--green-600);
+}
+.averageprice span, .total span {
+  display: block; font-size: 11.5px; font-weight: 700;
+  letter-spacing: .08em; color: var(--muted);
+}
+.averageprice b {
+  display: block; margin: 4px 0 3px;
+  color: var(--green-900); font-size: clamp(40px, 5vw, 58px);
+  font-weight: 900; line-height: .98; letter-spacing: -.055em;
+  font-variant-numeric: tabular-nums;
+}
+.averageprice small, .total small { font-size: 12px; color: var(--text-2); }
+.total { text-align: right; padding-bottom: 3px; }
 .total span { display: block; font-size: 12px; color: var(--muted); }
 .total b {
-  display: block; font-size: 27px; font-weight: 800;
-  color: var(--green-900); letter-spacing: -.01em; line-height: 1.3;
+  display: block; margin: 4px 0 5px; font-size: 17px; font-weight: 700;
+  color: var(--text); letter-spacing: -.015em; line-height: 1.3;
+  font-variant-numeric: tabular-nums;
 }
-.total small { font-size: 12px; color: var(--text-2); }
 
 .costtable { width: 100%; border-collapse: collapse; font-size: 14px; }
 .costtable th {
@@ -567,7 +599,8 @@ const coords = computed(() => {
   .metabar { grid-template-columns: 1fr 1fr; }
   .metabar > div:nth-child(odd) { border-left: none; }
   .compare, .issues, .casegrid, .row { grid-template-columns: 1fr; }
-  .costhead { flex-direction: column; align-items: flex-start; }
+  .costhead { grid-template-columns: 1fr; align-items: start; }
+  .costsummary { grid-template-columns: 1fr; padding-left: 18px; gap: 16px; }
   .total { text-align: left; }
   .costtable { font-size: 13px; }
   .costtable .rate { display: none; }
