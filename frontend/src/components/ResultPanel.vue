@@ -65,6 +65,9 @@ const problemPoints = computed(() =>
 const improvePoints = computed(() =>
   toPoints(r.value.report?.improvement_points, r.value.report?.improvement_narrative))
 
+const cost = computed(() => r.value.cost)
+const money = (n) => '$' + Number(n || 0).toLocaleString('en-US')
+
 const coords = computed(() => {
   const i = r.value.input || {}
   return `${Number(i.lat).toFixed(4)}, ${Number(i.lng).toFixed(4)}`
@@ -192,6 +195,61 @@ const coords = computed(() => {
           <p class="desc">{{ it.evidence || it.standard_violated }}</p>
           <p class="fix" v-if="it.solution">{{ it.solution }}</p>
         </div>
+      </section>
+
+      <!-- ── 工程費用估算 ──────────────────────────────── -->
+      <section class="cost" v-if="cost && cost.items?.length" v-reveal>
+        <div class="costhead">
+          <div>
+            <p class="eyebrow">Cost Estimate</p>
+            <h2>工程費用估算</h2>
+          </div>
+          <div class="total">
+            <span>標線工程合計</span>
+            <b>{{ money(cost.total.low) }} ~ {{ money(cost.total.high) }}</b>
+            <small>標線總面積 {{ cost.total_area_m2 }} ㎡</small>
+          </div>
+        </div>
+
+        <table class="costtable">
+          <thead>
+            <tr><th>項目</th><th>數量</th><th>單價</th><th class="r">金額</th></tr>
+          </thead>
+          <tbody>
+            <tr v-for="it in cost.items" :key="it.key">
+              <td>
+                <b>{{ it.label }}</b>
+                <em>{{ it.basis }}</em>
+              </td>
+              <td class="mono">{{ it.length_m }} m<br /><span>{{ it.area_m2 }} ㎡</span></td>
+              <td class="mono rate">{{ it.rate }}</td>
+              <td class="r mono">{{ money(it.low) }}</td>
+            </tr>
+            <tr v-for="(f, i) in cost.fixed" :key="'f' + i" class="fixedrow">
+              <td><b>{{ f.label }}</b><em>{{ f.basis }}</em></td>
+              <td class="mono">{{ f.quantity }}</td>
+              <td class="mono rate">{{ f.rate }}</td>
+              <td class="r mono">
+                {{ f.low === f.high ? money(f.low) : `${money(f.low)}~${money(f.high)}` }}
+              </td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="uncovered" v-if="cost.uncovered?.length">
+          <b>未計入總額</b>
+          <span>
+            下列屬土木構造物，單價與標線差一個量級，需另行估算：
+            <template v-for="(u, i) in cost.uncovered" :key="u.label">
+              {{ i ? '、' : '' }}{{ u.label }}<i class="mono"> {{ u.length_m }} m</i>
+            </template>
+          </span>
+        </div>
+
+        <details class="notes">
+          <summary>計算依據與假設</summary>
+          <ul><li v-for="(a, i) in cost.assumptions" :key="i">{{ a }}</li></ul>
+        </details>
       </section>
 
       <!-- ── 經典案例 ──────────────────────────────────── -->
@@ -385,6 +443,56 @@ const coords = computed(() => {
   margin: 18px 0 0; font-weight: 700; color: var(--green-700); font-size: 14.5px;
 }
 
+/* ── 工程費用估算 ─────────────────────────────────────── */
+.cost {
+  background: var(--surface); border: 1px solid var(--line-soft);
+  border-radius: 18px; padding: 30px 34px 26px;
+}
+.costhead {
+  display: flex; justify-content: space-between; align-items: flex-end;
+  gap: 24px; margin-bottom: 22px;
+}
+.costhead h2 { margin: 0; font-size: 25px; font-weight: 800; color: var(--green-900); }
+.total { text-align: right; flex: none; }
+.total span { display: block; font-size: 12px; color: var(--muted); }
+.total b {
+  display: block; font-size: 27px; font-weight: 800;
+  color: var(--green-900); letter-spacing: -.01em; line-height: 1.3;
+}
+.total small { font-size: 12px; color: var(--text-2); }
+
+.costtable { width: 100%; border-collapse: collapse; font-size: 14px; }
+.costtable th {
+  text-align: left; font-size: 11.5px; letter-spacing: .1em;
+  text-transform: uppercase; color: var(--muted); font-weight: 600;
+  padding: 0 12px 8px 0; border-bottom: 1px solid var(--line);
+}
+.costtable td { padding: 13px 12px 13px 0; border-bottom: 1px solid var(--line-soft); vertical-align: top; }
+.costtable td b { display: block; color: var(--green-900); font-size: 15px; }
+.costtable td em {
+  display: block; font-style: normal; font-size: 12px;
+  color: var(--muted); margin-top: 3px; line-height: 1.5;
+}
+.costtable td span { color: var(--muted); font-size: 12.5px; }
+.costtable .rate { color: var(--text-2); font-size: 12.5px; white-space: nowrap; }
+.costtable .r { text-align: right; white-space: nowrap; }
+.costtable tbody tr:last-child td { border-bottom: none; }
+.fixedrow td { background: #fbfaf7; }
+.fixedrow td:first-child { border-radius: 8px 0 0 8px; }
+.fixedrow td:last-child { border-radius: 0 8px 8px 0; }
+
+.uncovered {
+  margin-top: 18px; padding: 14px 16px; border-radius: 10px;
+  background: var(--bg-sunken); font-size: 13px; color: var(--text-2);
+}
+.uncovered b { color: var(--green-900); margin-right: 8px; }
+.uncovered i { font-style: normal; color: var(--muted); }
+
+.notes { margin-top: 14px; }
+.notes summary { cursor: pointer; font-size: 12.5px; color: var(--text-2); }
+.notes ul { margin: 10px 0 0; padding-left: 20px; font-size: 12.5px; color: var(--muted); }
+.notes li { margin-bottom: 5px; }
+
 /* ── 經典案例 ─────────────────────────────────────────── */
 .cases { background: var(--sage); border-radius: 22px; padding: 36px 38px 40px; }
 .caseshead {
@@ -422,6 +530,11 @@ const coords = computed(() => {
   .metabar { grid-template-columns: 1fr 1fr; }
   .metabar > div:nth-child(odd) { border-left: none; }
   .compare, .issues, .casegrid, .row { grid-template-columns: 1fr; }
+  .costhead { flex-direction: column; align-items: flex-start; }
+  .total { text-align: left; }
+  .costtable { font-size: 13px; }
+  .costtable .rate { display: none; }
+  .costtable th:nth-child(3) { display: none; }
   .twocol { grid-template-columns: 1fr; gap: 28px; padding: 26px; }
   .twocol > div + div { border-left: none; padding-left: 0; margin-left: 0; padding-top: 24px; border-top: 1px solid var(--line-soft); }
 }

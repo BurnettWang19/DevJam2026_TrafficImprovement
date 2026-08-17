@@ -24,7 +24,7 @@ import time
 import uuid
 
 from config import MAX_SIZE_M, MIN_SIZE_M, cases_dir, load_prompt, option
-from services import cache, cases, memory, osm, render, vision
+from services import cache, cases, costing, memory, osm, render, vision
 from services.gemini import call_image, call_json
 from services.geo import ImageFrame, bbox_from_center
 from services.imagery import attribution, fetch_satellite, to_data_url
@@ -334,6 +334,12 @@ async def _analyze(lat: float, lng: float, size_m: float) -> dict:
     memory.put(session_id, "design", result["design"])
     trace.add("重繪設計", "done",
               f"產生 {len(design_fc['features'])} 條設計線形、{len(annotations)} 個改動標記")
+
+    # 從向量資料實際量測長度，套標線單價表估算工程費用
+    result["cost"] = costing.estimate(design_fc)
+    trace.add("費用估算", "done",
+              f"標線面積 {result['cost']['total_area_m2']} ㎡，"
+              f"估算 ${result['cost']['total']['low']:,}~${result['cost']['total']['high']:,}")
 
     # ---- 8：向量圖生成圖片 ----------------------------------------------
     trace.add("生成設計圖", "running", "繪製設計圖與改動標示圖")
