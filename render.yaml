@@ -1,0 +1,26 @@
+# Render Blueprint —— 在 Render 選 "New +" → "Blueprint" 並指向這個 repo，
+# 就會照這份設定建立服務，不用在網頁上一格一格填。
+#
+# 金鑰不寫在這裡（sync: false 代表要在 Render 後台手動填），
+# 免得跟著 git 一起外流。
+
+services:
+  - type: web
+    name: intersection-audit-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    region: singapore          # 離台灣最近
+    plan: free
+    healthCheckPath: /api/health
+    envVars:
+      # 必填。到 Render 後台 → Environment 貼上 AI Studio 取得的金鑰
+      - key: GEMINI_API_KEY
+        sync: false
+      # 選填。留空會自動改用 Esri World Imagery（免金鑰）
+      - key: GOOGLE_MAPS_API_KEY
+        sync: false
+      - key: PORT
+        value: 8080
+      - key: HOST
+        value: 0.0.0.0

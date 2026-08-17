@@ -3,6 +3,12 @@ import { onMounted, reactive, ref } from 'vue'
 import MapPicker from './components/MapPicker.vue'
 import TraceTimeline from './components/TraceTimeline.vue'
 import ResultPanel from './components/ResultPanel.vue'
+import SplashScreen from './components/SplashScreen.vue'
+import RunnerLoader from './components/RunnerLoader.vue'
+import AnalysisProgress from './components/AnalysisProgress.vue'
+import { apiGet, apiPost } from './api'
+
+const booting = ref(true)
 
 const form = reactive({ lat: 25.0417, lng: 121.549, sizeM: 140 })
 const latText = ref(String(form.lat))
@@ -23,7 +29,7 @@ const PRESETS = [
 ]
 
 async function refreshHealth() {
-  try { health.value = await (await fetch('/api/health')).json() } catch { health.value = { ok: false } }
+  try { health.value = await apiGet('/api/health') } catch { health.value = { ok: false } }
 }
 onMounted(refreshHealth)
 
@@ -56,14 +62,9 @@ async function analyze(force = false) {
   error.value = ''
   result.value = null
   try {
-    const res = await fetch('/api/analyze', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ lat: form.lat, lng: form.lng, size_m: form.sizeM, force }),
+    result.value = await apiPost('/api/analyze', {
+      lat: form.lat, lng: form.lng, size_m: form.sizeM, force,
     })
-    const data = await res.json()
-    if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`)
-    result.value = data
   } catch (e) {
     error.value = e.message
   } finally {
@@ -75,15 +76,17 @@ async function analyze(force = false) {
 </script>
 
 <template>
-  <div class="app">
+  <SplashScreen v-if="booting" @done="booting = false" />
+
+  <div class="app" v-if="!booting">
     <aside>
-      <header>
+      <header v-reveal>
         <p class="eyebrow">Road Design Review</p>
         <h1>路口設計品質分析</h1>
         <p class="lede">OSM 向量與影像辨識彙整，經多重代理人評估後重繪改善設計。</p>
       </header>
 
-      <div class="card">
+      <div class="card" v-reveal="{ delay: 80 }">
         <label>中心點座標</label>
         <div class="grid2">
           <input v-model="latText" placeholder="緯度" @change="applyText" />
@@ -106,7 +109,7 @@ async function analyze(force = false) {
         </div>
       </div>
 
-      <div class="card map-card">
+      <div class="card map-card" v-reveal="{ delay: 160 }">
         <MapPicker ref="mapRef" :lat="form.lat" :lng="form.lng" :size-m="form.sizeM"
                    @pick="onPick" />
         <p class="hint">點地圖任一處即可設定中心點</p>
@@ -117,7 +120,7 @@ async function analyze(force = false) {
         <TraceTimeline :trace="result.trace" />
       </div>
 
-      <div class="card status" v-if="health">
+      <div class="card status" v-if="health" v-reveal="{ delay: 240 }">
         <p class="eyebrow">Status</p>
         <ul>
           <li :class="health.gemini_api_key ? 'ok' : 'no'">Gemini 金鑰</li>
@@ -135,7 +138,8 @@ async function analyze(force = false) {
       <div v-if="error" class="card err">分析失敗：{{ error }}</div>
 
       <div v-else-if="loading" class="card placeholder">
-        <div class="spinner"></div>
+        <RunnerLoader />
+        <AnalysisProgress :forcing="forcing" />
         <p v-if="forcing">
           正在實際重新分析：擷取 OSM 向量與衛星影像 → 影像辨識補上車道標線 →
           評分 → 路口分類 → 三個代理人平行診斷 → 重繪設計 → 生成圖面 → 彙整說明。
@@ -146,7 +150,7 @@ async function analyze(force = false) {
 
       <ResultPanel v-else-if="result" :result="result" @back="result = null" />
 
-      <div v-else class="card placeholder intro">
+      <div v-else class="card placeholder intro" v-reveal="{ delay: 120 }">
         <p class="eyebrow">Getting Started</p>
         <h2>輸入一組經緯度，開始分析</h2>
         <ol>
@@ -207,13 +211,6 @@ label:first-child { margin-top: 0; }
 .placeholder h2 { color: var(--green-900); font-size: 25px; font-weight: 800; margin: 0 0 14px; }
 .placeholder ol { padding-left: 20px; margin: 0; display: flex; flex-direction: column; gap: 7px; }
 .intro { padding: 34px 38px; }
-
-.spinner {
-  width: 26px; height: 26px; border-radius: 50%;
-  border: 3px solid var(--line); border-top-color: var(--green-700);
-  animation: spin .9s linear infinite; margin-bottom: 14px;
-}
-@keyframes spin { to { transform: rotate(360deg); } }
 
 @media (max-width: 900px) {
   .app { grid-template-columns: 1fr; height: auto; }

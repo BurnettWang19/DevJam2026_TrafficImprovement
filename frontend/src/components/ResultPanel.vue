@@ -74,7 +74,7 @@ const coords = computed(() => {
 <template>
   <div class="review">
     <!-- ── 頁首 ──────────────────────────────────────────── -->
-    <header class="head">
+    <header class="head" v-reveal>
       <button class="back" @click="emit('back')">← 重新選擇路口</button>
 
       <div class="title">
@@ -103,7 +103,7 @@ const coords = computed(() => {
     </div>
 
     <!-- ── 基本資訊列 ────────────────────────────────────── -->
-    <div class="metabar">
+    <div class="metabar" v-reveal="{ delay: 80 }">
       <div><span>分析位置</span><b class="mono">{{ coords }}</b></div>
       <div><span>路口型態</span><b>{{ r.intersection_type?.type || '—' }}</b></div>
       <div>
@@ -115,8 +115,8 @@ const coords = computed(() => {
 
     <!-- ── 非路口 ────────────────────────────────────────── -->
     <template v-if="r.verdict === 'not_intersection'">
-      <div class="notice">{{ r.message }}</div>
-      <figure class="single">
+      <div class="notice" v-reveal>{{ r.message }}</div>
+      <figure class="single" v-reveal="{ delay: 100 }">
         <img :src="r.current_image" alt="現況向量圖" />
         <figcaption>現況：衛星影像與 OSM／影像辨識向量</figcaption>
       </figure>
@@ -125,11 +125,11 @@ const coords = computed(() => {
     <template v-else>
       <!-- ── 前後對照 ──────────────────────────────────── -->
       <div class="compare" :class="{ single: !r.design_image }">
-        <figure>
+        <figure v-reveal>
           <img :src="r.current_image" alt="改善前" />
           <figcaption class="tag light">改善前<span>衛星影像與現況向量</span></figcaption>
         </figure>
-        <figure v-if="r.design_image_ai || r.design_image">
+        <figure v-if="r.design_image_ai || r.design_image" v-reveal="{ delay: 140 }">
           <img :src="r.design_image_ai || r.design_image" alt="建議方案" />
           <figcaption class="tag dark">
             建議方案<span>{{ r.design_image_ai ? 'AI 概念示意圖' : '設計向量圖' }}</span>
@@ -142,7 +142,7 @@ const coords = computed(() => {
       </div>
 
       <!-- ── 設計圖，需要說明的人再切到標示版 ────────── -->
-      <section class="marked" v-if="r.design_image">
+      <section class="marked" v-if="r.design_image" v-reveal>
         <div class="markedhead">
           <div>
             <p class="eyebrow">Proposed Design</p>
@@ -159,7 +159,7 @@ const coords = computed(() => {
       </section>
 
       <!-- ── 問題 / 改善（條列） ──────────────────────── -->
-      <section class="twocol" v-if="problemPoints.length || improvePoints.length">
+      <section class="twocol" v-if="problemPoints.length || improvePoints.length" v-reveal>
         <div v-if="problemPoints.length">
           <p class="eyebrow">Why It Matters</p>
           <h2>我們發現的問題</h2>
@@ -172,7 +172,7 @@ const coords = computed(() => {
         </div>
       </section>
 
-      <section class="twocol" v-else-if="r.verdict === 'no_problem'">
+      <section class="twocol" v-else-if="r.verdict === 'no_problem'" v-reveal>
         <div>
           <p class="eyebrow">Assessment</p>
           <h2>檢核結果</h2>
@@ -182,7 +182,8 @@ const coords = computed(() => {
 
       <!-- ── 問題卡片 ──────────────────────────────────── -->
       <section class="issues" v-if="allIssues.length">
-        <div class="card issue" v-for="(it, i) in allIssues" :key="it.id || i">
+        <div class="card issue" v-for="(it, i) in allIssues" :key="it.id || i"
+             v-reveal="{ delay: (i % 3) * 90 }">
           <div class="top">
             <span class="cat">{{ it.category }}</span>
             <span class="pill" :class="sev(it.severity).cls">{{ sev(it.severity).label }}</span>
@@ -195,7 +196,7 @@ const coords = computed(() => {
 
       <!-- ── 經典案例 ──────────────────────────────────── -->
       <section class="cases" v-if="cases.length">
-        <div class="caseshead">
+        <div class="caseshead" v-reveal>
           <div>
             <p class="eyebrow">Reference Cases</p>
             <h2>相似的經典案例</h2>
@@ -204,7 +205,8 @@ const coords = computed(() => {
         </div>
 
         <div class="casegrid">
-          <article class="card" v-for="c in cases" :key="c.id">
+          <article class="card" v-for="(c, i) in cases" :key="c.id"
+                   v-reveal="{ delay: (i % 3) * 90 }">
             <img v-if="c.image_data_url" :src="c.image_data_url" :alt="c.name" />
             <p class="where">{{ c.country }}</p>
             <h4>{{ c.name }}</h4>
@@ -216,10 +218,13 @@ const coords = computed(() => {
 
       <!-- ── 逐條改善對應 ──────────────────────────────── -->
       <section class="improve" v-if="r.report?.improvements?.length">
-        <p class="eyebrow">Change Log</p>
-        <h2>逐項對應</h2>
+        <div v-reveal>
+          <p class="eyebrow">Change Log</p>
+          <h2>逐項對應</h2>
+        </div>
         <div class="rows">
-          <div class="row card" v-for="(im, i) in r.report.improvements" :key="i">
+          <div class="row card" v-for="(im, i) in r.report.improvements" :key="i"
+               v-reveal="{ delay: Math.min(i, 4) * 70 }">
             <div><span>問題</span><p>{{ im.problem }}</p></div>
             <div><span>改動</span><p class="hl">{{ im.change }}</p></div>
             <div><span>效果</span><p>{{ im.effect }}</p></div>

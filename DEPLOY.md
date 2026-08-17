@@ -1,41 +1,155 @@
 # 部署
 
-單一容器：Vue 的 build 產物由 FastAPI 直接 serve，一個服務、一個網址、不用設 CORS。
-映像是平台中立的 —— Cloud Run、Render、Fly.io、Railway 都能直接跑同一個 image。
+**採用方案：前端 Firebase Hosting ＋ 後端 Render。** 兩邊都是免費方案，不需要帳單帳戶。
+
+```
+Firebase Hosting            Render
+（Vue 前端 · 免費 · CDN）  →  （Python 後端 · 免費 · Docker）
+   your-app.web.app              your-api.onrender.com
+```
+
+> **為什麼不用 Firebase 跑後端？** Cloud Functions 與 App Hosting 都只在 Blaze 方案提供，
+> 而 Blaze 需要綁定帳單帳戶 —— 跟 Cloud Run 是同一道牆。
+> Firebase 的免費 Spark 方案只能放靜態檔。
 
 ---
 
-## 本機驗證（已通過）
+## 一、後端上 Render
+
+### 1. 建立服務
+
+到 https://render.com 用 GitHub 登入，授權存取這個 repo，然後：
+
+**New + → Blueprint → 選這個 repo**
+
+根目錄的 `render.yaml` 會自動帶入設定（Docker、singapore 區域、free 方案、
+健康檢查指向 `/api/health`）。
+
+> 找不到 Blueprint 也可以用 **New + → Web Service**，Language 選 **Docker**，
+> Branch 選 `main`，Region 選 **Singapore**，Instance Type 選 **Free**。
+
+### 2. 填金鑰
+
+Environment → Add Environment Variable：
+
+```
+GEMINI_API_KEY = 你在 AI Studio 取得的金鑰
+```
+
+`GOOGLE_MAPS_API_KEY` 不用填，會自動改用 Esri World Imagery（免金鑰）。
+
+### 3. 等建置
+
+第一次約 5~10 分鐘（npm 依賴 + Python 套件 + 中文字型 + 快取）。
+
+完成後開 `https://你的服務.onrender.com/api/health`，確認：
+
+```json
+{
+  "gemini_api_key": true,
+  "imagery_ready": true,
+  "scorer_prompt_filled": true,
+  "cache_entries": 8      ← 這項是關鍵，代表預熱快取有進映像
+}
+```
+
+> **這個網址本身就是完整可用的 App。** 映像裡也包含前端 build 產物，
+> FastAPI 會直接 serve。所以就算 Firebase 那邊出狀況，這個網址仍然能 demo。
+
+---
+
+## 二、前端上 Firebase Hosting
+
+### 1. 安裝與登入
+
+```powershell
+npm install -g firebase-tools
+firebase login
+```
+
+### 2. 綁定專案
+
+你已經有一個專案 `gen-lang-client-0359154585`（AI Studio 自動建的），直接用：
+
+```powershell
+cd C:\Users\ianli\OneDrive\Desktop\DavJam_Project
+firebase use --add gen-lang-client-0359154585
+```
+
+第一次會要你在 Firebase Console（https://console.firebase.google.com）
+把這個 GCP 專案加入 Firebase —— 免費、不需要帳單。
+
+### 3. 指向後端並建置
+
+建立 `frontend/.env.production`（範本見 `.env.production.example`）：
+
+```
+VITE_API_BASE=https://你的服務.onrender.com
+```
+
+然後建置：
+
+```powershell
+cd frontend
+npm run build
+cd ..
+```
+
+### 4. 部署
+
+```powershell
+firebase deploy --only hosting
+```
+
+拿到 `https://<專案>.web.app`。
+
+---
+
+## 三、免費方案的三個限制（demo 前務必知道）
+
+**1. Render 免費方案閒置 15 分鐘會休眠。**
+冷啟動要拉 500 MB 映像，約 50 秒。**上台前 5 分鐘先開一次 `/api/health` 把它叫醒。**
+
+**2. 免費實例只有 0.1 CPU / 512 MB RAM。**
+- 快取命中的請求只是讀 JSON、回傳，資源需求極低 —— 示範座標不受影響。
+- **「↻ 重新分析（跳過快取）」會真的跑 Pillow 圖磚拼接與四張圖繪製**，在 0.1 CPU 上
+  會比本機慢很多，也有 OOM 的風險。部署後務必實測一次這個按鈕；
+  真的跑不動就在現場改用本機跑，或升級到 Starter 方案（$7/月）。
+
+**3. 快取是唯讀的起始狀態。**
+線上跑出的新結果寫在容器暫存層，**實例休眠或重啟就消失**。
+示範座標已經預熱進映像，所以不受影響。
+
+---
+
+## 四、改過東西之後要重跑什麼
+
+| 你改了 | 要做什麼 |
+|---|---|
+| 前端（`frontend/src/**`） | `npm run build` → `firebase deploy --only hosting` |
+| 後端程式碼、`prompts/`、`models.yaml` | **先 `python prewarm.py --prune` 再 `prewarm.py`**，然後 push 到 GitHub，Render 會自動重建 |
+| 只改 `example/index.json`（經典案例） | push 即可，不必重跑 prewarm（案例是回應時才讀的） |
+
+> `cache.fingerprint()` 涵蓋 `models.yaml`、`prompts/*.md` 與後端所有 `.py`。
+> 改了任何一個而沒重跑 prewarm，線上會變成 cache miss，每次點都要等 2 分鐘。
+
+---
+
+## 五、本機驗證
 
 ```powershell
 docker build -t intersection-audit .
 docker run --rm -p 8080:8080 --env-file .env intersection-audit
 ```
 
-開 http://localhost:8080 。實測：映像 509 MB、快取命中 448 ms、中文字型正常。
+開 http://localhost:8080 。實測：映像 509 MB、快取命中 448 ms、
+中文字型 NotoSansCJK 正常、映像內不含 `.env`。
 
 ---
 
-## Cloud Run
+## 附錄：改用 Cloud Run（需要帳單帳戶）
 
-### 前置
-
-1. **專案要綁定帳單帳戶。** Cloud Run 沒有免帳單的方案，這是硬性要求。
-2. **安裝 gcloud CLI**（https://cloud.google.com/sdk/docs/install），
-   或改用 Cloud Shell（https://shell.cloud.google.com，瀏覽器內建、免安裝）。
-
-### 建立專案卡在 organization 時
-
-Console 的 organization 欄位不會告訴你原因。用 CLI 診斷：
-
-```bash
-gcloud projects list          # 主辦方可能已經開好專案了，有就直接用
-gcloud organizations list     # 空的就代表本來就該選「No organization」
-gcloud beta billing accounts list
-gcloud projects create probe-$RANDOM   # 失敗訊息會明確指出是權限還是政策
-```
-
-### 部署
+之後拿到帳單帳戶想搬過去的話：
 
 ```bash
 PROJECT=你的專案ID
@@ -43,87 +157,32 @@ REGION=asia-east1
 
 gcloud config set project $PROJECT
 gcloud services enable run.googleapis.com cloudbuild.googleapis.com \
-                       artifactregistry.googleapis.com
+                       artifactregistry.googleapis.com secretmanager.googleapis.com
 
-# 金鑰放 Secret Manager，不要用 --set-env-vars 直接寫在指令裡
-gcloud services enable secretmanager.googleapis.com
 printf '%s' "你的GEMINI金鑰" | gcloud secrets create gemini-api-key --data-file=-
 
 gcloud run deploy intersection-audit \
-  --source . \
-  --region $REGION \
-  --allow-unauthenticated \
-  --memory 2Gi \
-  --cpu 2 \
-  --timeout 600 \
-  --concurrency 4 \
-  --min-instances 1 \
+  --source . --region $REGION --allow-unauthenticated \
+  --memory 2Gi --cpu 2 --timeout 600 --concurrency 4 --min-instances 1 \
   --set-secrets GEMINI_API_KEY=gemini-api-key:latest
 ```
 
-拿到 Google Maps 金鑰之後再加：
-
-```bash
-printf '%s' "你的MAPS金鑰" | gcloud secrets create google-maps-api-key --data-file=-
-gcloud run services update intersection-audit --region $REGION \
-  --set-secrets GEMINI_API_KEY=gemini-api-key:latest,GOOGLE_MAPS_API_KEY=google-maps-api-key:latest
-```
-
-### 為什麼是這些參數
-
 | 參數 | 原因 |
 |---|---|
-| `--timeout 600` | 單次分析約 120 秒，預設 300 秒餘裕不足。上限 3600 |
+| `--timeout 600` | 單次分析約 120 秒，預設 300 秒餘裕不足 |
 | `--memory 2Gi` | Pillow 圖磚拼接 + 6~7 MB 的回應 payload |
 | `--cpu 2` | 三個子代理人平行呼叫時不要卡住 |
-| `--concurrency 4` | 請求又長又吃記憶體，塞太多同一個實例會 OOM |
-| `--min-instances 1` | 避免冷啟動。demo 期間開著，結束後改回 0 省錢 |
+| `--min-instances 1` | 避免冷啟動；demo 結束改回 0 停止計費 |
 
----
-
-## 快取在雲端的行為
-
-Cloud Run 是無狀態的，容器重啟 `.cache/` 就沒了。目前的做法是**把預熱快取打包進映像**：
-
-```powershell
-# 部署前先在本機跑
-cd backend
-python prewarm.py --prune    # 清掉舊指紋的垃圾（實測可省 88 MB）
-python prewarm.py            # 產生現行版本的快取
-cd ..
-docker build -t intersection-audit .
-```
-
-映像裡的快取是唯讀的起始狀態。線上跑出來的新結果會寫進容器的暫存層，
-**實例回收就消失**，這對 demo 沒有影響（示範座標已經預熱好了）。
-
-不想打包快取的話，把 `.dockerignore` 裡的 `backend/.cache/` 那行取消註解。
-
-> 注意：`cache.fingerprint()` 涵蓋 `prompts/`、`models.yaml` 與後端所有 `.py`。
-> 改過任何一個就要重跑 `prewarm.py` 再重建映像，否則線上會是 cache miss（等 2 分鐘）。
-
----
-
-## 不用 GCP 的備援
-
-帳單卡住時，同一個 Dockerfile 可以直接用在：
-
-| 平台 | 免費方案 | 注意 |
-|---|---|---|
-| **Render** | 有，不需信用卡 | 免費方案會休眠，冷啟動約 50 秒 |
-| **Fly.io** | 有額度 | 需綁卡驗證 |
-| **Railway** | 試用額度 | 用完要付費 |
-
-Render 為例：連 GitHub repo → New Web Service → 選 Docker → 環境變數填 `GEMINI_API_KEY` → Deploy。
-不需要改任何程式碼。
+搬過去之後前端的 `VITE_API_BASE` 改成 Cloud Run 網址，重新 build 與 deploy 即可。
 
 ---
 
 ## 環境變數
 
-| 變數 | 必填 | 說明 |
-|---|---|---|
-| `GEMINI_API_KEY` | ✅ | 七個代理人角色都用這把 |
-| `GOOGLE_MAPS_API_KEY` | | 留空會自動改用 Esri World Imagery（免金鑰） |
-| `PORT` | | 平台會自動注入，預設 8080 |
-| `HOST` | | 容器內為 `0.0.0.0`，本機開發預設 `127.0.0.1` |
+| 變數 | 位置 | 必填 | 說明 |
+|---|---|---|---|
+| `GEMINI_API_KEY` | Render 後台 | ✅ | 七個代理人角色都用這把 |
+| `GOOGLE_MAPS_API_KEY` | Render 後台 | | 留空自動改用 Esri（免金鑰） |
+| `VITE_API_BASE` | `frontend/.env.production` | ✅ | 後端網址；留空則走相對路徑 |
+| `PORT` / `HOST` | 平台自動注入 | | 容器內為 `8080` / `0.0.0.0` |
