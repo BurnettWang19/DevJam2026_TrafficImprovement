@@ -366,7 +366,7 @@ State that Photorealistic 3D Tiles are the existing-city context and the colored
 **Interfaces:**
 - Confirms the production bundle can resolve CesiumJS workers/assets and the lazy 3D chunk.
 
-- [ ] **Step 1: Confirm no credentials are tracked**
+- [x] **Step 1: Confirm no credentials are tracked**
 
 Run:
 
@@ -378,7 +378,7 @@ git diff --check
 
 Expected: real `.env` files are ignored, no key appears in the diff, and `git diff --check` emits no whitespace errors.
 
-- [ ] **Step 2: Build the frontend without running tests**
+- [x] **Step 2: Build the frontend without running tests**
 
 Run:
 
@@ -389,7 +389,7 @@ npm run build
 
 Expected: Vite exits `0`, creates the lazy Cesium/Design3D bundle, and copies `Workers`, `ThirdParty`, `Assets`, and `Widgets` beneath `dist/cesiumStatic/`.
 
-- [ ] **Step 3: Review the final scope**
+- [x] **Step 3: Review the final scope**
 
 Run:
 

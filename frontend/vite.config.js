@@ -7,6 +7,7 @@ const cesiumSource = fileURLToPath(
   new URL('./node_modules/cesium/Build/Cesium', import.meta.url),
 )
 const cesiumBaseUrl = 'cesiumStatic'
+const cesiumDirectories = ['Workers', 'ThirdParty', 'Assets', 'Widgets']
 
 export default defineConfig({
   define: {
@@ -15,12 +16,14 @@ export default defineConfig({
   plugins: [
     vue(),
     viteStaticCopy({
-      targets: [
-        { src: `${cesiumSource}/Workers`, dest: cesiumBaseUrl },
-        { src: `${cesiumSource}/ThirdParty`, dest: cesiumBaseUrl },
-        { src: `${cesiumSource}/Assets`, dest: cesiumBaseUrl },
-        { src: `${cesiumSource}/Widgets`, dest: cesiumBaseUrl },
-      ],
+      // v4 preserves source paths. Strip the common
+      // node_modules/cesium/Build/Cesium/<directory> prefix while retaining
+      // nested files such as Assets/Textures and ThirdParty/Workers.
+      targets: cesiumDirectories.map((directory) => ({
+        src: `${cesiumSource}/${directory}/**/*`,
+        dest: `${cesiumBaseUrl}/${directory}`,
+        rename: { stripBase: 5 },
+      })),
     }),
   ],
   server: {
