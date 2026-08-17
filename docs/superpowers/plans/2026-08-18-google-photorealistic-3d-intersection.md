@@ -241,7 +241,7 @@ For layers with `edge`, add a darker corridor first at `width + 0.28`, then the 
 - Consumes: `GET /api/map-tiles/config`.
 - Produces: an interactive Cesium scene with reset-view and optional orbit controls, loading/error states, attribution, and a compact design-material legend.
 
-- [ ] **Step 1: Initialize a minimal Cesium viewer**
+- [x] **Step 1: Initialize a minimal Cesium viewer**
 
 Import only the required Cesium symbols, its widget stylesheet, `apiGet`, and `addRoadDesignOverlay`. Initialize `Viewer` with timeline, animation, geocoder, base-layer picker, info box, selection indicator, navigation help, and scene mode controls disabled. Disable the globe and atmosphere so Google's mesh is the only basemap.
 
@@ -265,7 +265,7 @@ viewer.scene.globe.show = false
 viewer.scene.skyAtmosphere.show = false
 ```
 
-- [ ] **Step 2: Load the licensed Google tileset**
+- [x] **Step 2: Load the licensed Google tileset**
 
 Fetch the runtime configuration, reject an empty/non-HTTPS Google URL, then create and add the tileset:
 
@@ -281,7 +281,7 @@ viewer.scene.primitives.add(tileset)
 
 Set `RequestScheduler.requestsByServer['tile.googleapis.com:443'] = 18` before loading, matching Google's Cesium performance recommendation.
 
-- [ ] **Step 3: Frame the selected intersection**
+- [x] **Step 3: Frame the selected intersection**
 
 Compute bbox centre and span in metres and reuse one `resetCamera()` function for initial position and the UI button:
 
@@ -300,7 +300,7 @@ viewer.camera.flyTo({
 
 Add the road overlay only after the Google tileset is attached. Report success as “真實城市模型 · N 個設計物件”.
 
-- [ ] **Step 4: Preserve intentional interaction and accessibility**
+- [x] **Step 4: Preserve intentional interaction and accessibility**
 
 Add quiet, transport-instrument-style controls rather than Cesium's full widget chrome:
 
@@ -313,7 +313,7 @@ Add quiet, transport-instrument-style controls rather than Cesium's full widget 
 
 Use the existing cream/deep-green system for surrounding chrome, but let the photographic city mesh be the visual signature. Avoid glow, floating tubes, glass panels, and decorative gradients over the map.
 
-- [ ] **Step 5: Clean up all Cesium resources**
+- [x] **Step 5: Clean up all Cesium resources**
 
 On unmount, cancel the orbit animation, remove DOM listeners, destroy the Cesium viewer exactly once, and avoid touching it after `viewer.isDestroyed()` becomes true.
 
