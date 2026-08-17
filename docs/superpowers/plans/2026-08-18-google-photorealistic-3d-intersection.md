@@ -158,7 +158,7 @@ export default defineConfig({
 - Consumes: a Cesium `Viewer` and a validated GeoJSON FeatureCollection whose coordinates are `[longitude, latitude]`.
 - Produces: `addRoadDesignOverlay(viewer, geojson): { entityCount: number, layers: string[] }`.
 
-- [ ] **Step 1: Define transport-design material specifications**
+- [x] **Step 1: Define transport-design material specifications**
 
 Create a module-level specification with physical widths in metres and restrained colors that remain readable on aerial photography:
 
@@ -178,7 +178,7 @@ const LAYER_SPEC = {
 }
 ```
 
-- [ ] **Step 2: Normalize supported geometry without trusting model output**
+- [x] **Step 2: Normalize supported geometry without trusting model output**
 
 Implement `geometryLines(geometry)` for `LineString`, `MultiLineString`, `Polygon`, and `MultiPolygon`; filter every point through `Number.isFinite`, longitude `[-180, 180]`, latitude `[-90, 90]`, and require at least two distinct points per line.
 
@@ -193,7 +193,7 @@ function validPoint(point) {
 }
 ```
 
-- [ ] **Step 3: Convert paths into real dash segments and zebra stripes**
+- [x] **Step 3: Convert paths into real dash segments and zebra stripes**
 
 Implement a local equirectangular projection centered on each path, cumulative path-length sampling, and these exact helpers:
 
@@ -211,7 +211,7 @@ function buildZebraStripes(points, stripeWidth = 0.46, gap = 0.54, crossingWidth
 
 The helpers must preserve bends by interpolating against cumulative segment length rather than treating the whole feature as one straight line.
 
-- [ ] **Step 4: Add classified, metre-wide corridors**
+- [x] **Step 4: Add classified, metre-wide corridors**
 
 For each physical segment, call `viewer.entities.add` with a ground corridor and no fixed height:
 
