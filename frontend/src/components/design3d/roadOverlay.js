@@ -8,6 +8,10 @@ import {
 const METRES_PER_DEGREE_LATITUDE = 111_320
 const MAX_FEATURES = 400
 const MAX_ENTITIES = 700
+const MAX_LINES_PER_GEOMETRY = 64
+const MAX_COORDINATES_PER_LINE = 256
+const MAX_LINES_TOTAL = 512
+const MAX_COORDINATES_TOTAL = 8_192
 const EPSILON_METRES = 0.01
 
 // Widths are physical metres. Colors stay close to real paving materials so the
@@ -37,7 +41,7 @@ function validPoint(point) {
 }
 
 function cleanLine(line) {
-  if (!Array.isArray(line)) return []
+  if (!Array.isArray(line) || line.length > MAX_COORDINATES_PER_LINE) return []
   const cleaned = []
   for (const point of line) {
     if (!validPoint(point)) continue
@@ -50,26 +54,53 @@ function cleanLine(line) {
   return cleaned.length >= 2 ? cleaned : []
 }
 
-function geometryLines(geometry) {
+function geometryLines(geometry, budget) {
   const coordinates = geometry?.coordinates
-  let lines = []
+  const lines = []
+  let inspectedLines = 0
+  const addLine = (line) => {
+    if (budget.exhausted || inspectedLines >= MAX_LINES_PER_GEOMETRY) return
+    inspectedLines += 1
+    if (!Array.isArray(line) || line.length > MAX_COORDINATES_PER_LINE) return
+    if (budget.lines >= MAX_LINES_TOTAL
+        || budget.coordinates + line.length > MAX_COORDINATES_TOTAL) {
+      budget.exhausted = true
+      return
+    }
+    budget.lines += 1
+    budget.coordinates += line.length
+    const cleaned = cleanLine(line)
+    if (cleaned.length >= 2) lines.push(cleaned)
+  }
   switch (geometry?.type) {
     case 'LineString':
-      lines = [coordinates]
+      addLine(coordinates)
       break
     case 'MultiLineString':
     case 'Polygon':
-      lines = coordinates
+      if (Array.isArray(coordinates)) {
+        for (const line of coordinates) {
+          addLine(line)
+          if (budget.exhausted || inspectedLines >= MAX_LINES_PER_GEOMETRY) break
+        }
+      }
       break
     case 'MultiPolygon':
-      lines = Array.isArray(coordinates) ? coordinates.flat() : []
+      if (Array.isArray(coordinates)) {
+        for (const polygon of coordinates) {
+          if (!Array.isArray(polygon)) continue
+          for (const ring of polygon) {
+            addLine(ring)
+            if (budget.exhausted || inspectedLines >= MAX_LINES_PER_GEOMETRY) break
+          }
+          if (budget.exhausted || inspectedLines >= MAX_LINES_PER_GEOMETRY) break
+        }
+      }
       break
     default:
       return []
   }
-  return (Array.isArray(lines) ? lines : [])
-    .map(cleanLine)
-    .filter((line) => line.length >= 2)
+  return lines
 }
 
 function projectionFor(points) {
@@ -234,14 +265,15 @@ export function addRoadDesignOverlay(viewer, geojson) {
     : []
   const renderedLayers = new Set()
   let entityCount = 0
+  const geometryBudget = { lines: 0, coordinates: 0, exhausted: false }
 
   for (const feature of features) {
-    if (entityCount >= MAX_ENTITIES) break
+    if (entityCount >= MAX_ENTITIES || geometryBudget.exhausted) break
     const layer = String(feature?.properties?.layer || '')
     const spec = LAYER_SPEC[layer]
     if (!spec) continue
 
-    for (const line of geometryLines(feature?.geometry)) {
+    for (const line of geometryLines(feature?.geometry, geometryBudget)) {
       if (entityCount >= MAX_ENTITIES) break
       let physicalPaths = [line]
       if (spec.dash) physicalPaths = splitDashedPath(line, ...spec.dash)

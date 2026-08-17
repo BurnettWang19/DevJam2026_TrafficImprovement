@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import {
   BoundingSphere,
   Cartesian3,
+  Cartographic,
   Cesium3DTileset,
   Color,
   HeadingPitchRange,
@@ -24,6 +25,7 @@ const loading = ref(true)
 const ready = ref(false)
 const error = ref('')
 const rotating = ref(false)
+const reducedMotion = ref(false)
 const entityCount = ref(0)
 
 const statusLabel = computed(() => {
@@ -42,6 +44,9 @@ let orbitLastTime = 0
 let resizeObserver
 let disposed = false
 let canvas
+let motionQuery
+let centerLng = 0
+let centerLat = 0
 
 function validatedBounds() {
   const south = Number(props.bbox?.south)
@@ -75,7 +80,7 @@ function resetCamera() {
   stopOrbit()
   orbitHeading = CesiumMath.toRadians(18)
   viewer.camera.flyToBoundingSphere(new BoundingSphere(target, 1), {
-    duration: 0.8,
+    duration: reducedMotion.value ? 0 : 0.8,
     offset: cameraView(),
     complete: () => {
       if (!viewer || viewer.isDestroyed()) return
@@ -98,7 +103,7 @@ function orbitTick(timestamp) {
 }
 
 function startOrbit() {
-  if (!ready.value || rotating.value) return
+  if (!ready.value || rotating.value || reducedMotion.value) return
   rotating.value = true
   orbitLastTime = 0
   if (orbitFrame === undefined) orbitFrame = requestAnimationFrame(orbitTick)
@@ -135,8 +140,8 @@ function validateTilesetUrl(value) {
 }
 
 function configureScene(bounds) {
-  const centerLat = (bounds.south + bounds.north) / 2
-  const centerLng = (bounds.west + bounds.east) / 2
+  centerLat = (bounds.south + bounds.north) / 2
+  centerLng = (bounds.west + bounds.east) / 2
   const northSouthMetres = (bounds.north - bounds.south) * 111_320
   const eastWestMetres = (bounds.east - bounds.west)
     * 111_320
@@ -150,6 +155,32 @@ function configureScene(bounds) {
   viewer.scene.screenSpaceCameraController.minimumZoomDistance = 18
   viewer.scene.screenSpaceCameraController.maximumZoomDistance = 3_000
   setCameraImmediate()
+}
+
+async function alignTargetToCitySurface() {
+  if (!viewer?.scene.sampleHeightSupported) return
+  let sampled
+  try {
+    sampled = await Promise.race([
+      viewer.scene.sampleHeightMostDetailed([
+        Cartographic.fromDegrees(centerLng, centerLat),
+      ]),
+      new Promise((resolve) => setTimeout(() => resolve([]), 5_000)),
+    ])
+  } catch {
+    // Surface sampling improves framing but must not make the whole 3D view fail.
+    return
+  }
+  if (disposed || !viewer || viewer.isDestroyed()) return
+  const height = Number(sampled?.[0]?.height)
+  if (!Number.isFinite(height)) return
+  target = Cartesian3.fromDegrees(centerLng, centerLat, height + 1.5)
+  setCameraImmediate()
+}
+
+function onMotionPreferenceChange(event) {
+  reducedMotion.value = event.matches
+  if (reducedMotion.value) stopOrbit()
 }
 
 async function initialize() {
@@ -195,14 +226,15 @@ async function initialize() {
 
     tileset = loadedTileset
     viewer.scene.primitives.add(tileset)
+    await alignTargetToCitySurface()
+    if (disposed || !viewer || viewer.isDestroyed()) return
     const overlay = addRoadDesignOverlay(viewer, props.geojson)
     entityCount.value = overlay.entityCount
     ready.value = true
     loading.value = false
     viewer.scene.requestRender()
 
-    const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    if (!reduceMotion) startOrbit()
+    if (!reducedMotion.value) startOrbit()
   } catch {
     if (disposed) return
     loading.value = false
@@ -212,6 +244,9 @@ async function initialize() {
 }
 
 onMounted(() => {
+  motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
+  onMotionPreferenceChange(motionQuery)
+  motionQuery.addEventListener('change', onMotionPreferenceChange)
   resizeObserver = new ResizeObserver(() => {
     if (!viewer || viewer.isDestroyed()) return
     viewer.resize()
@@ -225,6 +260,7 @@ onBeforeUnmount(() => {
   disposed = true
   stopOrbit()
   resizeObserver?.disconnect()
+  motionQuery?.removeEventListener('change', onMotionPreferenceChange)
   canvas?.removeEventListener('pointerdown', stopOrbit)
   canvas?.removeEventListener('wheel', stopOrbit)
   if (viewer && !viewer.isDestroyed()) viewer.destroy()
@@ -248,9 +284,12 @@ onBeforeUnmount(() => {
         ↺ 回到路口
       </button>
       <button type="button" :aria-pressed="rotating"
-              :aria-label="rotating ? '停止環繞路口' : '開始環繞路口'"
+              :disabled="reducedMotion"
+              :aria-label="reducedMotion
+                ? '系統已停用動態環繞'
+                : rotating ? '停止環繞路口' : '開始環繞路口'"
               @click="toggleOrbit">
-        {{ rotating ? '停止環繞' : '環繞檢視' }}
+        {{ reducedMotion ? '環繞已停用' : rotating ? '停止環繞' : '環繞檢視' }}
       </button>
     </div>
 
